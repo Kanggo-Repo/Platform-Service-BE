@@ -1,66 +1,47 @@
 <?php
 
-use App\Models\Permission;
-use App\Models\Role;
-use App\Models\ServiceAccess;
-use App\Models\User;
+use Illuminate\Support\Facades\Http;
 use Tests\Support\GeneratesPlatformTokens;
 
 uses(GeneratesPlatformTokens::class);
 
 beforeEach(function () {
     $this->bootPlatformTokenConfig();
+
+    config()->set([
+        'services.supply_service.base_url' => 'http://127.0.0.1:8008',
+        'services.supply_service.service_name' => 'platform-service-be',
+        'services.supply_service.token' => 'platform-be-test-token',
+        'services.calculation_service.base_url' => 'http://127.0.0.1:8000',
+    ]);
 });
 
-test('dashboard endpoint exposes platform summary for operator users', function () {
-    $operatorRole = Role::query()->create([
-        'code' => 'platform_operator',
-        'name' => 'Platform Operator',
-        'description' => 'Platform operator',
-        'is_system' => true,
-        'is_deletable' => false,
-    ]);
-
-    Permission::query()->create([
-        'code' => 'users.view',
-        'name' => 'users.view',
-        'module' => 'users',
-        'description' => 'View users',
-        'service_scope' => 'platform',
-    ]);
-
-    $allowedUser = User::factory()->create([
-        'keycloak_subject' => 'kc-user-1',
-        'email' => 'user@example.test',
-        'status' => 'active',
-    ]);
-    $allowedUser->roles()->attach($operatorRole);
-
-    $pendingUser = User::factory()->create([
-        'keycloak_subject' => 'kc-user-2',
-        'email' => 'pending@example.test',
-        'status' => 'pending_access',
-    ]);
-
-    ServiceAccess::query()->create([
-        'user_id' => $allowedUser->id,
-        'service_code' => 'platform',
-        'access_status' => 'allowed',
-    ]);
-    ServiceAccess::query()->create([
-        'user_id' => $allowedUser->id,
-        'service_code' => 'supply',
-        'access_status' => 'allowed',
-    ]);
-    ServiceAccess::query()->create([
-        'user_id' => $allowedUser->id,
-        'service_code' => 'calculation',
-        'access_status' => 'pending',
-    ]);
-    ServiceAccess::query()->create([
-        'user_id' => $pendingUser->id,
-        'service_code' => 'platform',
-        'access_status' => 'pending',
+test('dashboard endpoint aggregates real summary from supply and calculation services', function () {
+    Http::fake([
+        'http://127.0.0.1:8008/api/v1/dashboard-summary' => Http::response([
+            'data' => [
+                'material_count' => 288,
+                'unit_count' => 26,
+                'store_count' => 126,
+                'chart_data' => [
+                    'labels' => ['Bata', 'Cat', 'Semen', 'Nat', 'Pasir', 'Keramik'],
+                    'data' => [9, 85, 165, 0, 12, 11],
+                ],
+                'recent_activities' => [
+                    [
+                        'name' => 'Roman Glossy',
+                        'category' => 'Keramik',
+                        'category_color' => 'primary',
+                        'created_at_human' => '1 menit yang lalu',
+                    ],
+                ],
+            ],
+        ]),
+        'http://127.0.0.1:8000/api/v1/dashboard-summary' => Http::response([
+            'data' => [
+                'work_item_count' => 42,
+            ],
+        ]),
     ]);
 
     $token = $this->issuePlatformToken([], ['platform_operator']);
@@ -68,16 +49,17 @@ test('dashboard endpoint exposes platform summary for operator users', function 
     $this->withToken($token)
         ->getJson('/api/v1/dashboard')
         ->assertOk()
-        ->assertJsonPath('data.summary.total_users', 2)
-        ->assertJsonPath('data.summary.role_count', 2)
-        ->assertJsonPath('data.summary.permission_count', fn ($value) => is_int($value) && $value > 10)
-        ->assertJsonPath('data.summary.pending_access_count', 1)
-        ->assertJsonPath('data.summary.allowed_user_count', 1)
-        ->assertJsonPath('data.chart.labels.0', 'Platform')
-        ->assertJsonPath('data.chart.data.0', 1)
-        ->assertJsonPath('data.chart.data.1', 1)
-        ->assertJsonPath('data.chart.data.2', 1)
-        ->assertJsonPath('data.service_matrix.platform', 1)
-        ->assertJsonPath('data.service_matrix.supply', 1)
-        ->assertJsonPath('data.service_matrix.calculation', 1);
+        ->assertJsonPath('data.summary.total_users', 288)
+        ->assertJsonPath('data.summary.role_count', 26)
+        ->assertJsonPath('data.summary.permission_count', 126)
+        ->assertJsonPath('data.summary.pending_access_count', 42)
+        ->assertJsonPath('data.chart.labels.0', 'Bata')
+        ->assertJsonPath('data.chart.data.2', 165)
+        ->assertJsonPath('data.recent_activities.0.category', 'Keramik');
+
+    Http::assertSent(function ($request) {
+        return $request->url() === 'http://127.0.0.1:8008/api/v1/dashboard-summary'
+            && $request->hasHeader('X-Service-Name', 'platform-service-be')
+            && $request->hasHeader('X-Service-Token', 'platform-be-test-token');
+    });
 });

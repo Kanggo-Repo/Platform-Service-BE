@@ -1,8 +1,9 @@
 <?php
 
-use App\Http\Controllers\Api\V1\PlatformHealthController;
 use App\Http\Controllers\Api\V1\PlatformDashboardController;
+use App\Http\Controllers\Api\V1\PlatformHealthController;
 use App\Http\Controllers\Api\V1\PlatformIdentityController;
+use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\RegistrationSettingsController;
 use App\Http\Controllers\Api\V1\RoleManagementController;
 use App\Http\Controllers\Api\V1\UserManagementController;
@@ -16,6 +17,8 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware(AuthenticatePlatformToken::class)->group(function (): void {
         Route::get('/me', [PlatformIdentityController::class, 'me']);
         Route::get('/navigation', [PlatformIdentityController::class, 'navigation']);
+        Route::get('/profile', [ProfileController::class, 'show']);
+        Route::put('/profile', [ProfileController::class, 'update']);
 
         Route::middleware(EnsurePlatformOperatorRole::class)->group(function (): void {
             Route::get('/dashboard', PlatformDashboardController::class);

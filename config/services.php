@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'supply_service' => [
+        'base_url' => env('SUPPLY_SERVICE_BASE_URL', 'http://127.0.0.1:8008'),
+        'service_name' => env('SUPPLY_SERVICE_CALLER_NAME', 'platform-service-be'),
+        'token' => env('PLATFORM_SERVICE_BE_TOKEN'),
+    ],
+
+    'calculation_service' => [
+        'base_url' => env('CALCULATION_SERVICE_BASE_URL', 'http://127.0.0.1:8000'),
+    ],
+
 ];
