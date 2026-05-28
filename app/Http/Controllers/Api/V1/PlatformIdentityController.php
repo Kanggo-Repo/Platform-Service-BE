@@ -14,8 +14,7 @@ class PlatformIdentityController extends Controller
     public function __construct(
         private readonly UserProjectionService $userProjectionService,
         private readonly NavigationResolver $navigationResolver,
-    ) {
-    }
+    ) {}
 
     public function me(Request $request): JsonResponse
     {
@@ -24,6 +23,8 @@ class PlatformIdentityController extends Controller
 
         $user = $this->userProjectionService->syncFromIdentity($identity);
         $navigation = $this->navigationResolver->resolve($user);
+        $roles = $this->userProjectionService->effectiveRoleCodes($user)->all();
+        $permissions = $this->userProjectionService->effectivePermissionCodes($user)->all();
 
         return response()->json([
             'data' => [
@@ -31,6 +32,7 @@ class PlatformIdentityController extends Controller
                     'subject' => $identity->subject,
                     'email' => $user->email,
                     'name' => $user->name,
+                    'realm_roles' => $identity->realmRoles,
                 ],
                 'profile' => [
                     'id' => $user->id,
@@ -44,7 +46,8 @@ class PlatformIdentityController extends Controller
                     'blocked_services' => $navigation['blocked_services'],
                     'pending_services' => $navigation['pending_services'],
                 ],
-                'roles' => $identity->realmRoles,
+                'roles' => $roles,
+                'permissions' => $permissions,
                 'navigation' => [
                     'preferred_route' => $navigation['preferred_route'],
                 ],

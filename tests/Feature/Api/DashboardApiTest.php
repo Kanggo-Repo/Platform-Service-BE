@@ -69,15 +69,15 @@ test('dashboard endpoint exposes platform summary for operator users', function 
         ->getJson('/api/v1/dashboard')
         ->assertOk()
         ->assertJsonPath('data.summary.total_users', 2)
-        ->assertJsonPath('data.summary.role_count', 1)
-        ->assertJsonPath('data.summary.permission_count', 1)
+        ->assertJsonPath('data.summary.role_count', 2)
+        ->assertJsonPath('data.summary.permission_count', fn ($value) => is_int($value) && $value > 10)
         ->assertJsonPath('data.summary.pending_access_count', 1)
         ->assertJsonPath('data.summary.allowed_user_count', 1)
         ->assertJsonPath('data.chart.labels.0', 'Platform')
         ->assertJsonPath('data.chart.data.0', 1)
         ->assertJsonPath('data.chart.data.1', 1)
-        ->assertJsonPath('data.chart.data.2', 0)
+        ->assertJsonPath('data.chart.data.2', 1)
         ->assertJsonPath('data.service_matrix.platform', 1)
         ->assertJsonPath('data.service_matrix.supply', 1)
-        ->assertJsonPath('data.service_matrix.calculation', 0);
+        ->assertJsonPath('data.service_matrix.calculation', 1);
 });

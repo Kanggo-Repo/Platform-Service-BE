@@ -2,6 +2,7 @@
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\User;
 use Tests\Support\GeneratesPlatformTokens;
 
 uses(GeneratesPlatformTokens::class);
@@ -24,6 +25,39 @@ test('platform operator can read grouped permissions catalog', function () {
         ->assertJsonFragment([
             'name' => 'users.assign-roles',
         ]);
+});
+
+test('local platform operator role can read grouped permissions catalog without realm role', function () {
+    $permission = Permission::query()->create([
+        'code' => 'roles.view',
+        'name' => 'Lihat roles',
+        'module' => 'roles',
+        'description' => 'Melihat daftar role.',
+        'service_scope' => 'platform',
+    ]);
+
+    $role = Role::query()->create([
+        'code' => 'platform_operator',
+        'name' => 'Platform Operator',
+        'description' => 'Core role',
+        'is_system' => true,
+        'is_deletable' => false,
+    ]);
+    $role->permissions()->sync([$permission->id]);
+
+    $user = User::factory()->create([
+        'keycloak_subject' => 'kc-user-1',
+        'email' => 'user@example.test',
+        'status' => 'active',
+    ]);
+    $user->roles()->sync([$role->id]);
+
+    $token = $this->issuePlatformToken();
+
+    $this->withToken($token)
+        ->getJson('/api/v1/permissions')
+        ->assertOk()
+        ->assertJsonPath('data.total', fn ($value) => is_int($value) && $value > 10);
 });
 
 test('platform operator can create role and implied permissions are expanded', function () {

@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Permission;
+use App\Models\Role;
 use App\Models\ServiceAccess;
 use App\Models\User;
 use Tests\Support\GeneratesPlatformTokens;
@@ -105,6 +107,167 @@ test('authenticated request attaches keycloak subject to pre-provisioned user by
 
     expect($user->keycloak_subject)->toBe('kc-user-1')
         ->and($user->name)->toBe('Platform User');
+});
+
+test('authenticated request activates pre-provisioned admin user with platform permissions', function () {
+    $permission = Permission::query()->create([
+        'code' => 'roles.manage',
+        'name' => 'Kelola penuh roles',
+        'module' => 'roles',
+        'description' => 'Akses penuh role.',
+        'service_scope' => 'platform',
+    ]);
+
+    $role = Role::query()->create([
+        'code' => 'platform_operator',
+        'name' => 'Platform Operator',
+        'is_system' => true,
+        'is_deletable' => false,
+    ]);
+    $role->permissions()->sync([$permission->id]);
+
+    $user = User::factory()->create([
+        'keycloak_subject' => null,
+        'email' => 'user@example.test',
+        'name' => 'Admin Existing',
+        'status' => 'active',
+        'preferred_app' => 'platform',
+    ]);
+    $user->roles()->sync([$role->id]);
+
+    $token = $this->issuePlatformToken([], ['platform_operator']);
+
+    $this->withToken($token)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('data.profile.id', $user->id)
+        ->assertJsonPath('data.profile.status', 'active')
+        ->assertJsonPath('data.access.pending_access', false)
+        ->assertJsonPath('data.identity.realm_roles.0', 'platform_operator')
+        ->assertJsonPath('data.roles.0', 'platform_operator')
+        ->assertJsonPath('data.permissions.0', 'roles.manage')
+        ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
+
+    $user->refresh();
+
+    expect($user->keycloak_subject)->toBe('kc-user-1');
+    expect(ServiceAccess::query()
+        ->where('user_id', $user->id)
+        ->where('service_code', 'platform')
+        ->value('access_status'))
+        ->toBe('allowed');
+});
+
+test('me endpoint exposes effective local super admin role and permissions separately from keycloak realm roles', function () {
+    $permission = Permission::query()->create([
+        'code' => 'users.manage',
+        'name' => 'Kelola penuh users',
+        'module' => 'users',
+        'description' => 'Akses penuh user.',
+        'service_scope' => 'platform',
+    ]);
+
+    $role = Role::query()->create([
+        'code' => 'super_admin',
+        'name' => 'Super Admin',
+        'is_system' => true,
+        'is_deletable' => false,
+    ]);
+    $role->permissions()->sync([$permission->id]);
+
+    $user = User::factory()->create([
+        'keycloak_subject' => 'kc-user-1',
+        'email' => 'user@example.test',
+        'status' => 'active',
+        'preferred_app' => 'platform',
+    ]);
+    $user->roles()->sync([$role->id]);
+
+    ServiceAccess::query()->create([
+        'user_id' => $user->id,
+        'service_code' => 'platform',
+        'access_status' => 'allowed',
+    ]);
+    ServiceAccess::query()->create([
+        'user_id' => $user->id,
+        'service_code' => 'supply',
+        'access_status' => 'pending',
+    ]);
+    ServiceAccess::query()->create([
+        'user_id' => $user->id,
+        'service_code' => 'calculation',
+        'access_status' => 'pending',
+    ]);
+
+    $token = $this->issuePlatformToken();
+
+    $this->withToken($token)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('data.identity.realm_roles', [])
+        ->assertJsonPath('data.roles.0', 'super_admin')
+        ->assertJsonPath('data.permissions.0', 'users.manage')
+        ->assertJsonPath('data.access.pending_access', false)
+        ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
+});
+
+test('authenticated request grants platform access to pre-provisioned platform operator from realm role', function () {
+    $user = User::factory()->create([
+        'keycloak_subject' => null,
+        'email' => 'user@example.test',
+        'name' => 'Realm Admin',
+        'status' => 'pending_access',
+        'preferred_app' => 'platform',
+    ]);
+
+    $token = $this->issuePlatformToken([], ['platform_operator']);
+
+    $this->withToken($token)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('data.profile.id', $user->id)
+        ->assertJsonPath('data.profile.status', 'active')
+        ->assertJsonPath('data.access.pending_access', false)
+        ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
+
+    $user->refresh();
+
+    expect($user->keycloak_subject)->toBe('kc-user-1')
+        ->and($user->status)->toBe('active');
+    expect(ServiceAccess::query()
+        ->where('user_id', $user->id)
+        ->where('service_code', 'platform')
+        ->value('access_status'))
+        ->toBe('allowed');
+});
+
+test('first pre-provisioned local user is bootstrapped as platform operator when no local assignments exist', function () {
+    $user = User::factory()->create([
+        'keycloak_subject' => null,
+        'email' => 'user@example.test',
+        'name' => 'Bootstrap Admin',
+        'status' => 'pending_access',
+        'preferred_app' => 'platform',
+    ]);
+
+    $token = $this->issuePlatformToken();
+
+    $this->withToken($token)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('data.profile.id', $user->id)
+        ->assertJsonPath('data.profile.status', 'active')
+        ->assertJsonPath('data.access.pending_access', false)
+        ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
+
+    $user->refresh()->load('roles');
+
+    expect($user->roles->pluck('code')->all())->toContain('platform_operator');
+    expect(ServiceAccess::query()
+        ->where('user_id', $user->id)
+        ->where('service_code', 'platform')
+        ->value('access_status'))
+        ->toBe('allowed');
 });
 
 test('navigation endpoint exposes pending service matrix', function () {

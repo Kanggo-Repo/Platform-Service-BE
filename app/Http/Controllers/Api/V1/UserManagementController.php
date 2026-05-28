@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Identity\KeycloakAdminProvisioner;
 use App\Services\Registration\RegistrationPolicyService;
 use App\Support\Auth\PlatformIdentity;
 use Illuminate\Http\JsonResponse;
@@ -15,8 +16,8 @@ class UserManagementController extends Controller
 {
     public function __construct(
         private readonly RegistrationPolicyService $registrationPolicyService,
-    ) {
-    }
+        private readonly KeycloakAdminProvisioner $keycloakAdminProvisioner,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -64,8 +65,14 @@ class UserManagementController extends Controller
     {
         $validated = $this->validatePayload($request);
 
+        $keycloakSubject = $this->keycloakAdminProvisioner->provisionUser(
+            name: $validated['name'],
+            email: $validated['email'],
+            password: $validated['password'],
+        );
+
         $user = User::query()->create([
-            'keycloak_subject' => null,
+            'keycloak_subject' => $keycloakSubject,
             'email' => $validated['email'],
             'name' => $validated['name'],
             'display_name' => $validated['name'],
@@ -86,9 +93,27 @@ class UserManagementController extends Controller
     {
         $validated = $this->validatePayload($request, $user);
 
+        $keycloakSubject = $user->keycloak_subject;
+
+        if ($keycloakSubject !== null) {
+            $this->keycloakAdminProvisioner->updateUser(
+                subject: $keycloakSubject,
+                name: $validated['name'],
+                email: $validated['email'],
+                password: $validated['password'] ?? null,
+            );
+        } elseif (filled($validated['password'] ?? null)) {
+            $keycloakSubject = $this->keycloakAdminProvisioner->provisionUser(
+                name: $validated['name'],
+                email: $validated['email'],
+                password: $validated['password'],
+            );
+        }
+
         $this->syncRoles($user, $validated['roles'] ?? []);
 
         $user->update([
+            'keycloak_subject' => $keycloakSubject,
             'email' => $validated['email'],
             'name' => $validated['name'],
             'display_name' => $validated['name'],
@@ -129,6 +154,7 @@ class UserManagementController extends Controller
                 'max:255',
                 Rule::unique('users', 'email')->ignore($user?->id),
             ],
+            'password' => [$user ? 'nullable' : 'required', 'string', 'min:8'],
             'roles' => ['nullable', 'array'],
             'roles.*' => ['string', Rule::exists('roles', 'name')],
         ]);

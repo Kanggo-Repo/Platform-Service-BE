@@ -2,6 +2,7 @@
 
 namespace App\Services\Identity;
 
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -112,7 +113,7 @@ class KeycloakTokenVerifier
         $jwks = Cache::remember(
             'platform_auth_jwks',
             $cacheSeconds,
-            fn (): array => Http::acceptJson()->get($jwksUrl)->throw()->json('keys', []),
+            fn (): array => $this->httpClient()->acceptJson()->get($jwksUrl)->throw()->json('keys', []),
         );
 
         foreach ($jwks as $key) {
@@ -132,6 +133,24 @@ class KeycloakTokenVerifier
         }
 
         return '';
+    }
+
+    private function httpClient(): PendingRequest
+    {
+        return Http::withOptions([
+            'verify' => $this->resolveVerifyOption(),
+        ]);
+    }
+
+    private function resolveVerifyOption(): bool|string
+    {
+        $caBundle = trim((string) config('platform_auth.ca_bundle', ''));
+
+        if ($caBundle !== '') {
+            return $caBundle;
+        }
+
+        return (bool) config('platform_auth.verify_ssl', true);
     }
 
     private function base64UrlDecode(string $value): string
