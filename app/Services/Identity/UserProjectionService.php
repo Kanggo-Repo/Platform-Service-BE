@@ -232,15 +232,22 @@ class UserProjectionService
 
     private function resolveAllowedServices(User $user, PlatformIdentity $identity): Collection
     {
+        $roleCodes = $this->effectiveRoleCodes($user);
+
+        if (
+            $identity->hasRealmRole('super_admin')
+            || $identity->hasRealmRole('platform_operator')
+            || $roleCodes->contains('super_admin')
+            || $roleCodes->contains('platform_operator')
+        ) {
+            return collect(['platform', 'supply', 'calculation']);
+        }
+
         $services = $user->roles
             ->flatMap(fn ($role) => $role->permissions->pluck('service_scope'))
             ->filter(fn ($serviceScope) => in_array($serviceScope, ['platform', 'supply', 'calculation'], true))
             ->unique()
             ->values();
-
-        if ($identity->hasRealmRole('platform_operator')) {
-            $services->push('platform');
-        }
 
         return $services
             ->filter(fn ($serviceScope) => in_array($serviceScope, ['platform', 'supply', 'calculation'], true))

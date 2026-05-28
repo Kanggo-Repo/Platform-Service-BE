@@ -208,6 +208,7 @@ test('me endpoint exposes effective local super admin role and permissions separ
         ->assertJsonPath('data.roles.0', 'super_admin')
         ->assertJsonPath('data.permissions.0', 'users.manage')
         ->assertJsonPath('data.access.pending_access', false)
+        ->assertJsonFragment(['allowed_services' => ['calculation', 'platform', 'supply']])
         ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
 });
 
@@ -228,6 +229,7 @@ test('authenticated request grants platform access to pre-provisioned platform o
         ->assertJsonPath('data.profile.id', $user->id)
         ->assertJsonPath('data.profile.status', 'active')
         ->assertJsonPath('data.access.pending_access', false)
+        ->assertJsonFragment(['allowed_services' => ['calculation', 'platform', 'supply']])
         ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
 
     $user->refresh();
@@ -258,6 +260,7 @@ test('first pre-provisioned local user is bootstrapped as platform operator when
         ->assertJsonPath('data.profile.id', $user->id)
         ->assertJsonPath('data.profile.status', 'active')
         ->assertJsonPath('data.access.pending_access', false)
+        ->assertJsonFragment(['allowed_services' => ['calculation', 'platform', 'supply']])
         ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
 
     $user->refresh()->load('roles');
