@@ -37,12 +37,16 @@ return [
 
     'supply_service' => [
         'base_url' => env('SUPPLY_SERVICE_BASE_URL', 'http://127.0.0.1:8008'),
-        'service_name' => env('SUPPLY_SERVICE_CALLER_NAME', 'platform-service-be'),
-        'token' => env('PLATFORM_SERVICE_BE_TOKEN'),
+        'service_name' => env('INTERNAL_CALLER_NAME', 'platform-service-be'),
+        'token' => env('INTERNAL_SERVICE_TOKEN', env('PLATFORM_SERVICE_TOKEN')),
+        'verify_ssl' => filter_var(env('SUPPLY_SERVICE_VERIFY_SSL', false), FILTER_VALIDATE_BOOL),
+        'ca_bundle' => env('SUPPLY_SERVICE_CA_BUNDLE'),
     ],
 
     'calculation_service' => [
         'base_url' => env('CALCULATION_SERVICE_BASE_URL', 'http://127.0.0.1:8000'),
+        'verify_ssl' => filter_var(env('CALCULATION_SERVICE_VERIFY_SSL', false), FILTER_VALIDATE_BOOL),
+        'ca_bundle' => env('CALCULATION_SERVICE_CA_BUNDLE'),
     ],
 
 ];
