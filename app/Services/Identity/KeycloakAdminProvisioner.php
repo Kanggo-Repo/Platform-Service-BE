@@ -81,6 +81,28 @@ class KeycloakAdminProvisioner
             ->throw();
     }
 
+    public function setRealmRegistrationEnabled(bool $enabled): void
+    {
+        $accessToken = $this->adminAccessToken();
+
+        $realm = $this->httpClient()
+            ->withToken($accessToken)
+            ->get($this->adminRealmUrl())
+            ->throw()
+            ->json();
+
+        if (! is_array($realm)) {
+            throw new RuntimeException('Keycloak realm lookup returned an invalid response.');
+        }
+
+        $realm['registrationAllowed'] = $enabled;
+
+        $this->httpClient()
+            ->withToken($accessToken)
+            ->put($this->adminRealmUrl(), $realm)
+            ->throw();
+    }
+
     private function findUserIdByEmail(string $email): string
     {
         $users = $this->httpClient()
@@ -157,6 +179,11 @@ class KeycloakAdminProvisioner
     private function adminUsersUrl(): string
     {
         return rtrim($this->baseUrl(), '/').'/admin/realms/'.$this->realm().'/users';
+    }
+
+    private function adminRealmUrl(): string
+    {
+        return rtrim($this->baseUrl(), '/').'/admin/realms/'.$this->realm();
     }
 
     private function baseUrl(): string

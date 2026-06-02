@@ -4,10 +4,15 @@ namespace App\Services\Registration;
 
 use App\Models\AuditLog;
 use App\Models\RegistrationPolicy;
+use App\Services\Identity\KeycloakAdminProvisioner;
 use App\Support\Auth\PlatformIdentity;
 
 class RegistrationPolicyService
 {
+    public function __construct(
+        private readonly KeycloakAdminProvisioner $keycloakAdminProvisioner,
+    ) {}
+
     public function current(): RegistrationPolicy
     {
         return RegistrationPolicy::query()->firstOrCreate([], [
@@ -23,6 +28,8 @@ class RegistrationPolicyService
         $policy = $this->current();
         $policy->fill($attributes);
         $policy->save();
+
+        $this->keycloakAdminProvisioner->setRealmRegistrationEnabled((bool) $policy->registration_enabled);
 
         AuditLog::query()->create([
             'actor_subject' => $identity->subject,
