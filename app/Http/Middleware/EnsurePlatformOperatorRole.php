@@ -28,7 +28,7 @@ class EnsurePlatformOperatorRole
             ], Response::HTTP_FORBIDDEN);
         }
 
-        if ($identity->hasRealmRole('platform_operator') || $identity->hasRealmRole('super_admin')) {
+        if ($identity->hasRealmRole('super_admin')) {
             $request->attributes->set(
                 'platform_user',
                 $request->attributes->get('platform_user') ?? $this->userProjectionService->syncFromIdentity($identity),
@@ -60,7 +60,7 @@ class EnsurePlatformOperatorRole
             ->values()
             ->all();
 
-        if (array_intersect($roleCodes, ['platform_operator', 'super_admin']) !== []) {
+        if (in_array('super_admin', $roleCodes, true)) {
             return true;
         }
 

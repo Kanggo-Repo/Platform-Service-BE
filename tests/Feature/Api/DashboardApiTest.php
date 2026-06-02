@@ -44,7 +44,7 @@ test('dashboard endpoint aggregates real summary from supply and calculation ser
         ]),
     ]);
 
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $this->withToken($token)
         ->getJson('/api/v1/dashboard')

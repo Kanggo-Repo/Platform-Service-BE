@@ -132,23 +132,6 @@ class UserProjectionService
     {
         $this->permissionCatalogService->syncCatalog();
 
-        $platformOperator = Role::query()->firstOrCreate(
-            ['code' => 'platform_operator'],
-            [
-                'name' => 'Platform Operator',
-                'description' => 'Bootstrap administrator role for platform operations.',
-                'is_system' => true,
-                'is_deletable' => false,
-            ],
-        );
-
-        $this->rolePolicyService->assignPermissions($platformOperator, [
-            'dashboard.view',
-            'roles.manage',
-            'users.manage',
-            'settings.manage',
-        ]);
-
         $superAdmin = Role::query()->firstOrCreate(
             ['code' => 'super_admin'],
             [
@@ -162,7 +145,6 @@ class UserProjectionService
         $this->rolePolicyService->assignPermissions($superAdmin, []);
 
         return [
-            'platform_operator' => $platformOperator,
             'super_admin' => $superAdmin,
         ];
     }
@@ -171,22 +153,8 @@ class UserProjectionService
     {
         $roleIds = [];
 
-        if ($identity->hasRealmRole('platform_operator') && isset($coreRoles['platform_operator'])) {
-            $roleIds[] = $coreRoles['platform_operator']->id;
-        }
-
         if ($identity->hasRealmRole('super_admin') && isset($coreRoles['super_admin'])) {
             $roleIds[] = $coreRoles['super_admin']->id;
-        }
-
-        if (
-            $roleIds === []
-            && $matchedPreProvisionedUser
-            && $user->roles()->count() === 0
-            && DB::table('user_roles')->count() === 0
-            && isset($coreRoles['platform_operator'])
-        ) {
-            $roleIds[] = $coreRoles['platform_operator']->id;
         }
 
         if ($roleIds !== []) {
@@ -236,9 +204,7 @@ class UserProjectionService
 
         if (
             $identity->hasRealmRole('super_admin')
-            || $identity->hasRealmRole('platform_operator')
             || $roleCodes->contains('super_admin')
-            || $roleCodes->contains('platform_operator')
         ) {
             return collect(['platform', 'supply', 'calculation']);
         }

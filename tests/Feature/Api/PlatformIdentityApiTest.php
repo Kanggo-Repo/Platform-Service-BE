@@ -119,8 +119,8 @@ test('authenticated request activates pre-provisioned admin user with platform p
     ]);
 
     $role = Role::query()->create([
-        'code' => 'platform_operator',
-        'name' => 'Platform Operator',
+        'code' => 'super_admin',
+        'name' => 'Super Admin',
         'is_system' => true,
         'is_deletable' => false,
     ]);
@@ -135,7 +135,7 @@ test('authenticated request activates pre-provisioned admin user with platform p
     ]);
     $user->roles()->sync([$role->id]);
 
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $this->withToken($token)
         ->getJson('/api/v1/me')
@@ -143,8 +143,8 @@ test('authenticated request activates pre-provisioned admin user with platform p
         ->assertJsonPath('data.profile.id', $user->id)
         ->assertJsonPath('data.profile.status', 'active')
         ->assertJsonPath('data.access.pending_access', false)
-        ->assertJsonPath('data.identity.realm_roles.0', 'platform_operator')
-        ->assertJsonPath('data.roles.0', 'platform_operator')
+        ->assertJsonPath('data.identity.realm_roles.0', 'super_admin')
+        ->assertJsonPath('data.roles.0', 'super_admin')
         ->assertJsonPath('data.permissions.0', 'roles.manage')
         ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
 
@@ -212,7 +212,7 @@ test('me endpoint exposes effective local super admin role and permissions separ
         ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
 });
 
-test('authenticated request grants platform access to pre-provisioned platform operator from realm role', function () {
+test('authenticated request grants platform access to pre-provisioned super admin from realm role', function () {
     $user = User::factory()->create([
         'keycloak_subject' => null,
         'email' => 'user@example.test',
@@ -221,7 +221,7 @@ test('authenticated request grants platform access to pre-provisioned platform o
         'preferred_app' => 'platform',
     ]);
 
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $this->withToken($token)
         ->getJson('/api/v1/me')
@@ -243,7 +243,7 @@ test('authenticated request grants platform access to pre-provisioned platform o
         ->toBe('allowed');
 });
 
-test('first pre-provisioned local user is bootstrapped as platform operator when no local assignments exist', function () {
+test('first pre-provisioned local user stays pending when no local assignments exist and no super admin realm role is present', function () {
     $user = User::factory()->create([
         'keycloak_subject' => null,
         'email' => 'user@example.test',
@@ -258,19 +258,19 @@ test('first pre-provisioned local user is bootstrapped as platform operator when
         ->getJson('/api/v1/me')
         ->assertOk()
         ->assertJsonPath('data.profile.id', $user->id)
-        ->assertJsonPath('data.profile.status', 'active')
-        ->assertJsonPath('data.access.pending_access', false)
-        ->assertJsonFragment(['allowed_services' => ['calculation', 'platform', 'supply']])
-        ->assertJsonPath('data.navigation.preferred_route', 'platform.dashboard');
+        ->assertJsonPath('data.profile.status', 'pending_access')
+        ->assertJsonPath('data.access.pending_access', true)
+        ->assertJsonFragment(['allowed_services' => []])
+        ->assertJsonPath('data.navigation.preferred_route', 'platform.access.pending');
 
     $user->refresh()->load('roles');
 
-    expect($user->roles->pluck('code')->all())->toContain('platform_operator');
+    expect($user->roles->pluck('code')->all())->not->toContain('super_admin');
     expect(ServiceAccess::query()
         ->where('user_id', $user->id)
         ->where('service_code', 'platform')
         ->value('access_status'))
-        ->toBe('allowed');
+        ->toBe('pending');
 });
 
 test('navigation endpoint exposes pending service matrix', function () {

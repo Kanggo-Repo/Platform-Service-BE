@@ -22,8 +22,8 @@ test('profile show returns current projected user profile with keycloak identity
     ]);
 
     $role = Role::query()->create([
-        'code' => 'platform_operator',
-        'name' => 'Platform Operator',
+        'code' => 'super_admin',
+        'name' => 'Super Admin',
         'is_system' => true,
         'is_deletable' => false,
     ]);
@@ -35,7 +35,7 @@ test('profile show returns current projected user profile with keycloak identity
         'given_name' => 'Platform',
         'family_name' => 'User',
         'name' => 'Platform User',
-    ], ['platform_operator']))
+    ], ['super_admin']))
         ->getJson('/api/v1/profile')
         ->assertOk()
         ->assertJsonPath('data.id', $user->id)
@@ -44,13 +44,13 @@ test('profile show returns current projected user profile with keycloak identity
         ->assertJsonPath('data.full_name', 'Platform User')
         ->assertJsonPath('data.first_name', 'Platform')
         ->assertJsonPath('data.last_name', 'User')
-        ->assertJsonPath('data.roles.0', 'Platform Operator')
+        ->assertJsonPath('data.roles.0', 'Super Admin')
         ->assertJsonPath('data.identity.provider', 'keycloak')
         ->assertJsonPath('data.identity.provider_label', 'Keycloak')
         ->assertJsonPath('data.identity.subject', 'kc-user-1')
         ->assertJsonPath('data.identity.username', 'platform.user')
         ->assertJsonPath('data.identity.preferred_username', 'platform.user')
-        ->assertJsonPath('data.identity.realm_roles.0', 'platform_operator')
+        ->assertJsonPath('data.identity.realm_roles.0', 'super_admin')
         ->assertJsonPath('data.identity.email_verified', true);
 });
 

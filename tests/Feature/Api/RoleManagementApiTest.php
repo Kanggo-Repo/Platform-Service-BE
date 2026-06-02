@@ -11,8 +11,8 @@ beforeEach(function () {
     $this->bootPlatformTokenConfig();
 });
 
-test('platform operator can read grouped permissions catalog', function () {
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+test('super admin can read grouped permissions catalog', function () {
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $this->withToken($token)
         ->getJson('/api/v1/permissions')
@@ -27,7 +27,7 @@ test('platform operator can read grouped permissions catalog', function () {
         ]);
 });
 
-test('local platform operator role can read grouped permissions catalog without realm role', function () {
+test('local super admin role can read grouped permissions catalog without realm role', function () {
     $permission = Permission::query()->create([
         'code' => 'roles.view',
         'name' => 'Lihat roles',
@@ -37,8 +37,8 @@ test('local platform operator role can read grouped permissions catalog without 
     ]);
 
     $role = Role::query()->create([
-        'code' => 'platform_operator',
-        'name' => 'Platform Operator',
+        'code' => 'super_admin',
+        'name' => 'Super Admin',
         'description' => 'Core role',
         'is_system' => true,
         'is_deletable' => false,
@@ -60,8 +60,8 @@ test('local platform operator role can read grouped permissions catalog without 
         ->assertJsonPath('data.total', fn ($value) => is_int($value) && $value > 10);
 });
 
-test('platform operator can create role and implied permissions are expanded', function () {
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+test('super admin can create role and implied permissions are expanded', function () {
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $response = $this->withToken($token)
         ->postJson('/api/v1/roles', [
@@ -83,8 +83,8 @@ test('platform operator can create role and implied permissions are expanded', f
     expect($role->permissions->pluck('code')->all())->toContain('stores.view');
 });
 
-test('platform operator can update role permissions', function () {
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+test('super admin can update role permissions', function () {
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $role = Role::query()->create([
         'code' => 'ops_viewer',
@@ -112,7 +112,7 @@ test('platform operator can update role permissions', function () {
 });
 
 test('super admin role cannot be renamed', function () {
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $role = Role::query()->create([
         'code' => 'super_admin',
@@ -136,11 +136,11 @@ test('super admin role cannot be renamed', function () {
 });
 
 test('core roles cannot be deleted', function () {
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $role = Role::query()->create([
-        'code' => 'platform_operator',
-        'name' => 'Platform Operator',
+        'code' => 'super_admin',
+        'name' => 'Super Admin',
         'description' => 'Core role',
         'is_system' => true,
         'is_deletable' => false,
@@ -154,8 +154,8 @@ test('core roles cannot be deleted', function () {
         ]);
 });
 
-test('platform operator can list roles with users count and permissions', function () {
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+test('super admin can list roles with users count and permissions', function () {
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $permission = Permission::query()->create([
         'code' => 'custom.view',

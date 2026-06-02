@@ -12,7 +12,7 @@ beforeEach(function () {
     $this->bootPlatformTokenConfig();
 });
 
-test('platform operator can list users with roles and registration summary using keycloak-style fields', function () {
+test('super admin can list users with roles and registration summary using keycloak-style fields', function () {
     RegistrationPolicy::query()->create([
         'registration_enabled' => true,
         'approval_mode' => 'admin_approval',
@@ -21,15 +21,15 @@ test('platform operator can list users with roles and registration summary using
     ]);
 
     $role = Role::query()->create([
-        'code' => 'platform_operator',
-        'name' => 'Platform Operator',
+        'code' => 'super_admin',
+        'name' => 'Super Admin',
         'is_system' => true,
         'is_deletable' => false,
     ]);
 
     $activeUser = User::factory()->create([
         'keycloak_subject' => 'kc-user-1',
-        'name' => 'Platform Operator',
+        'name' => 'Super Admin',
         'status' => 'active',
     ]);
     $activeUser->roles()->sync([$role->id]);
@@ -40,7 +40,7 @@ test('platform operator can list users with roles and registration summary using
         'status' => 'pending_access',
     ]);
 
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $this->withHeader('Authorization', "Bearer {$token}")
         ->getJson('/api/v1/users')
@@ -54,15 +54,15 @@ test('platform operator can list users with roles and registration summary using
         ->assertJsonPath('data.items.0.last_name', 'User')
         ->assertJsonFragment(['email' => 'user@example.test'])
         ->assertJsonFragment([
-            'name' => 'Platform Operator',
+            'name' => 'Super Admin',
             'users_count' => 1,
         ]);
 });
 
-test('platform operator can create user and assign roles with keycloak-style fields', function () {
+test('super admin can create user and assign roles with keycloak-style fields', function () {
     $role = Role::query()->create([
-        'code' => 'platform_operator',
-        'name' => 'Platform Operator',
+        'code' => 'super_admin',
+        'name' => 'Super Admin',
         'is_system' => true,
         'is_deletable' => false,
     ]);
@@ -81,7 +81,7 @@ test('platform operator can create user and assign roles with keycloak-style fie
         ]),
     ]);
 
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $this->withHeader('Authorization', "Bearer {$token}")
         ->postJson('/api/v1/users', [
@@ -89,7 +89,7 @@ test('platform operator can create user and assign roles with keycloak-style fie
             'last_name' => 'Owner',
             'email' => 'supply.owner@example.test',
             'password' => 'password123',
-            'roles' => ['Platform Operator'],
+            'roles' => ['Super Admin'],
         ])
         ->assertCreated()
         ->assertJsonPath('data.name', 'Supply Owner')
@@ -98,13 +98,13 @@ test('platform operator can create user and assign roles with keycloak-style fie
         ->assertJsonPath('data.last_name', 'Owner')
         ->assertJsonPath('data.username', 'supply.owner@example.test')
         ->assertJsonPath('data.status', 'active')
-        ->assertJsonPath('data.roles.0', 'Platform Operator');
+        ->assertJsonPath('data.roles.0', 'Super Admin');
 
     $user = User::query()->where('email', 'supply.owner@example.test')->firstOrFail();
 
     expect($user->keycloak_subject)->toBe('kc-created-user-1')
         ->and($user->name)->toBe('Supply Owner')
-        ->and($user->roles->pluck('name')->all())->toBe(['Platform Operator']);
+        ->and($user->roles->pluck('name')->all())->toBe(['Super Admin']);
 
     Http::assertSent(function ($request) {
         return $request->url() === 'https://auth.example.test/realms/kanggo/protocol/openid-connect/token'
@@ -128,10 +128,10 @@ test('platform operator can create user and assign roles with keycloak-style fie
     });
 });
 
-test('platform operator can provision existing local user to keycloak during update with keycloak-style fields', function () {
+test('super admin can provision existing local user to keycloak during update with keycloak-style fields', function () {
     $role = Role::query()->create([
-        'code' => 'platform_operator',
-        'name' => 'Platform Operator',
+        'code' => 'super_admin',
+        'name' => 'Super Admin',
         'is_system' => true,
         'is_deletable' => false,
     ]);
@@ -157,7 +157,7 @@ test('platform operator can provision existing local user to keycloak during upd
         ]),
     ]);
 
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $this->withHeader('Authorization', "Bearer {$token}")
         ->putJson("/api/v1/users/{$user->id}", [
@@ -165,7 +165,7 @@ test('platform operator can provision existing local user to keycloak during upd
             'last_name' => 'User',
             'email' => 'legacy.user@example.test',
             'password' => 'password123',
-            'roles' => ['Platform Operator'],
+            'roles' => ['Super Admin'],
         ])
         ->assertOk()
         ->assertJsonPath('data.name', 'Legacy User')
@@ -177,19 +177,13 @@ test('platform operator can provision existing local user to keycloak during upd
 
     expect($user->keycloak_subject)->toBe('kc-created-user-2')
         ->and($user->name)->toBe('Legacy User')
-        ->and($user->roles->pluck('name')->all())->toBe(['Platform Operator']);
+        ->and($user->roles->pluck('name')->all())->toBe(['Super Admin']);
 });
 
-test('platform operator can update existing keycloak user into super admin role with keycloak-style fields', function () {
-    $operatorRole = Role::query()->create([
-        'code' => 'platform_operator',
-        'name' => 'Platform Operator',
-        'is_system' => true,
-        'is_deletable' => false,
-    ]);
-
-    $superAdminRole = Role::query()->create([
+test('super admin can update existing keycloak user into super admin role with keycloak-style fields', function () {
+    $superAdminRole = Role::query()->firstOrCreate([
         'code' => 'super_admin',
+    ], [
         'name' => 'Super Admin',
         'is_system' => true,
         'is_deletable' => false,
@@ -201,7 +195,7 @@ test('platform operator can update existing keycloak user into super admin role 
         'name' => 'Legacy User',
         'status' => 'active',
     ]);
-    $user->roles()->sync([$operatorRole->id]);
+    $user->roles()->sync([$superAdminRole->id]);
 
     config()->set([
         'platform_auth.admin_client_id' => 'platform-admin-cli',
@@ -216,7 +210,7 @@ test('platform operator can update existing keycloak user into super admin role 
         'https://auth.example.test/admin/realms/kanggo/users/kc-existing-user-1/reset-password' => Http::response([], 204),
     ]);
 
-    $token = $this->issuePlatformToken([], ['platform_operator']);
+    $token = $this->issuePlatformToken([], ['super_admin']);
 
     $this->withHeader('Authorization', "Bearer {$token}")
         ->putJson("/api/v1/users/{$user->id}", [
