@@ -1,0 +1,28 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - vendor/nesbot/carbon/extension.neon
+
+parameters:
+    paths:
+        - app
+        - config
+        - routes
+        - database/factories
+        - database/seeders
+
+    level: 5
+
+    tmpDir: storage/phpstan
+    treatPhpDocTypesAsCertain: false
+
+    checkModelProperties: true
+    checkModelAppends: true
+    checkConfigTypes: true
+    noEnvCallsOutsideOfConfig: true
+    generalizeEnvReturnType: true
+
+    databaseMigrationsPath:
+        - database/migrations
+
+    configDirectories:
+        - config

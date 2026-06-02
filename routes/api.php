@@ -10,9 +10,11 @@ use App\Http\Controllers\Api\V1\UserManagementController;
 use App\Http\Middleware\AuthenticatePlatformToken;
 use App\Http\Middleware\EnsurePlatformOperatorRole;
 use Illuminate\Support\Facades\Route;
+use Spatie\Health\Http\Controllers\HealthCheckJsonResultsController;
 
 Route::prefix('v1')->group(function (): void {
     Route::get('/health', PlatformHealthController::class);
+    Route::get('/health/json', HealthCheckJsonResultsController::class);
 
     Route::middleware(AuthenticatePlatformToken::class)->group(function (): void {
         Route::get('/me', [PlatformIdentityController::class, 'me']);

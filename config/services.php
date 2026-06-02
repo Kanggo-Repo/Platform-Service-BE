@@ -37,7 +37,7 @@ return [
 
     'supply_service' => [
         'base_url' => env('SUPPLY_SERVICE_BASE_URL', 'http://127.0.0.1:8008'),
-        'service_name' => env('INTERNAL_CALLER_NAME', 'platform-service-be'),
+        'service_name' => env('INTERNAL_CALLER_NAME', env('APP_NAME', 'platform-service-be')),
         'token' => env('INTERNAL_SERVICE_TOKEN', env('PLATFORM_SERVICE_TOKEN')),
         'verify_ssl' => filter_var(env('SUPPLY_SERVICE_VERIFY_SSL', false), FILTER_VALIDATE_BOOL),
         'ca_bundle' => env('SUPPLY_SERVICE_CA_BUNDLE'),
