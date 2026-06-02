@@ -64,18 +64,20 @@ class UserManagementController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $this->validatePayload($request);
+        $fullName = $this->buildFullName($validated['first_name'], $validated['last_name'] ?? null);
 
         $keycloakSubject = $this->keycloakAdminProvisioner->provisionUser(
-            name: $validated['name'],
+            name: $validated['first_name'],
             email: $validated['email'],
             password: $validated['password'],
+            lastName: $validated['last_name'] ?? null,
         );
 
         $user = User::query()->create([
             'keycloak_subject' => $keycloakSubject,
             'email' => $validated['email'],
-            'name' => $validated['name'],
-            'display_name' => $validated['name'],
+            'name' => $fullName,
+            'display_name' => $fullName,
             'status' => empty($validated['roles']) ? 'pending_access' : 'active',
             'preferred_app' => null,
             'email_verified_at' => null,
@@ -92,21 +94,24 @@ class UserManagementController extends Controller
     public function update(Request $request, User $user): JsonResponse
     {
         $validated = $this->validatePayload($request, $user);
+        $fullName = $this->buildFullName($validated['first_name'], $validated['last_name'] ?? null);
 
         $keycloakSubject = $user->keycloak_subject;
 
         if ($keycloakSubject !== null) {
             $this->keycloakAdminProvisioner->updateUser(
                 subject: $keycloakSubject,
-                name: $validated['name'],
+                name: $validated['first_name'],
                 email: $validated['email'],
                 password: $validated['password'] ?? null,
+                lastName: $validated['last_name'] ?? null,
             );
         } elseif (filled($validated['password'] ?? null)) {
             $keycloakSubject = $this->keycloakAdminProvisioner->provisionUser(
-                name: $validated['name'],
+                name: $validated['first_name'],
                 email: $validated['email'],
                 password: $validated['password'],
+                lastName: $validated['last_name'] ?? null,
             );
         }
 
@@ -115,8 +120,8 @@ class UserManagementController extends Controller
         $user->update([
             'keycloak_subject' => $keycloakSubject,
             'email' => $validated['email'],
-            'name' => $validated['name'],
-            'display_name' => $validated['name'],
+            'name' => $fullName,
+            'display_name' => $fullName,
             'status' => empty($validated['roles']) ? 'pending_access' : 'active',
         ]);
 
@@ -146,7 +151,8 @@ class UserManagementController extends Controller
     private function validatePayload(Request $request, ?User $user = null): array
     {
         return $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['nullable', 'string', 'max:255'],
             'email' => [
                 'required',
                 'string',
@@ -172,13 +178,39 @@ class UserManagementController extends Controller
 
     private function serializeUser(User $user): array
     {
+        [$firstName, $lastName] = $this->splitName($user->name);
+
         return [
             'id' => $user->id,
             'keycloak_subject' => $user->keycloak_subject,
             'name' => $user->name,
+            'full_name' => $user->name,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'username' => $user->email,
             'email' => $user->email,
             'status' => $user->roles->isNotEmpty() ? 'active' : 'pending_access',
             'roles' => $user->roles->pluck('name')->values()->all(),
         ];
+    }
+
+    private function buildFullName(string $firstName, ?string $lastName): string
+    {
+        return trim($firstName.' '.trim((string) $lastName));
+    }
+
+    private function splitName(?string $value): array
+    {
+        $normalized = preg_replace('/\s+/', ' ', trim((string) $value)) ?? '';
+
+        if ($normalized === '') {
+            return ['', null];
+        }
+
+        $segments = explode(' ', $normalized);
+        $firstName = array_shift($segments) ?? '';
+        $lastName = $segments !== [] ? implode(' ', $segments) : null;
+
+        return [$firstName, $lastName];
     }
 }
