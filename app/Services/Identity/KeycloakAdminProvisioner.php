@@ -56,11 +56,8 @@ class KeycloakAdminProvisioner
             'enabled' => true,
             'emailVerified' => true,
             'firstName' => $name,
+            'lastName' => $lastName ?? '',
         ];
-
-        if ($lastName !== null) {
-            $payload['lastName'] = $lastName;
-        }
 
         $this->httpClient()
             ->withToken($accessToken)
@@ -79,6 +76,44 @@ class KeycloakAdminProvisioner
                 'temporary' => false,
             ])
             ->throw();
+    }
+
+    /**
+     * @return array{
+     *     first_name: string,
+     *     last_name: ?string,
+     *     full_name: string,
+     *     email: string,
+     *     username: string,
+     *     email_verified: bool|null
+     * }
+     */
+    public function fetchUserProfile(string $subject): array
+    {
+        $payload = $this->httpClient()
+            ->withToken($this->adminAccessToken())
+            ->get($this->adminUsersUrl().'/'.$subject)
+            ->throw()
+            ->json();
+
+        if (! is_array($payload)) {
+            throw new RuntimeException('Keycloak user profile lookup returned an invalid response.');
+        }
+
+        $firstName = trim((string) ($payload['firstName'] ?? ''));
+        $lastName = trim((string) ($payload['lastName'] ?? ''));
+        $fullName = trim($firstName.' '.$lastName);
+
+        return [
+            'first_name' => $firstName,
+            'last_name' => $lastName !== '' ? $lastName : null,
+            'full_name' => $fullName,
+            'email' => trim((string) ($payload['email'] ?? '')),
+            'username' => trim((string) ($payload['username'] ?? '')),
+            'email_verified' => array_key_exists('emailVerified', $payload)
+                ? (bool) $payload['emailVerified']
+                : null,
+        ];
     }
 
     public function setRealmRegistrationEnabled(bool $enabled): void

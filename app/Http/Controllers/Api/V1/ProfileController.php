@@ -9,6 +9,8 @@ use App\Services\Identity\UserProjectionService;
 use App\Support\Auth\PlatformIdentity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use RuntimeException;
+use Throwable;
 
 class ProfileController extends Controller
 {
@@ -23,9 +25,10 @@ class ProfileController extends Controller
         $identity = $request->attributes->get('platform_identity');
 
         $user = $this->userProjectionService->syncFromIdentity($identity)->load('roles');
+        $authoritativeProfile = $this->loadAuthoritativeKeycloakProfile($user);
 
         return response()->json([
-            'data' => $this->serializeUser($user, $identity),
+            'data' => $this->serializeUser($user, $identity, $authoritativeProfile),
         ]);
     }
 
@@ -106,6 +109,10 @@ class ProfileController extends Controller
             return trim((string) $overrides['first_name']);
         }
 
+        if (array_key_exists('given_name', $identity->claims)) {
+            return trim((string) ($identity->claims['given_name'] ?? ''));
+        }
+
         $claim = trim((string) ($identity->claims['given_name'] ?? ''));
 
         if ($claim !== '') {
@@ -125,6 +132,12 @@ class ProfileController extends Controller
             return $lastName !== '' ? $lastName : null;
         }
 
+        if (array_key_exists('family_name', $identity->claims)) {
+            $lastName = trim((string) ($identity->claims['family_name'] ?? ''));
+
+            return $lastName !== '' ? $lastName : null;
+        }
+
         $claim = trim((string) ($identity->claims['family_name'] ?? ''));
 
         if ($claim !== '') {
@@ -139,7 +152,23 @@ class ProfileController extends Controller
     private function resolveFullName(User $user, PlatformIdentity $identity, string $firstName, ?string $lastName, array $overrides): string
     {
         if (array_key_exists('full_name', $overrides)) {
-            return trim((string) $overrides['full_name']);
+            $fullName = trim((string) $overrides['full_name']);
+
+            if ($fullName !== '') {
+                return $fullName;
+            }
+
+            return $this->buildFullName($firstName, $lastName, $user->name);
+        }
+
+        if (array_key_exists('name', $identity->claims)) {
+            $fullName = trim((string) ($identity->claims['name'] ?? ''));
+
+            if ($fullName !== '') {
+                return $fullName;
+            }
+
+            return $this->buildFullName($firstName, $lastName, $user->name);
         }
 
         $claim = trim((string) ($identity->claims['name'] ?? ''));
@@ -171,5 +200,18 @@ class ProfileController extends Controller
         $lastName = $segments !== [] ? implode(' ', $segments) : null;
 
         return [$firstName, $lastName];
+    }
+
+    private function loadAuthoritativeKeycloakProfile(User $user): array
+    {
+        if ($user->keycloak_subject === null || $user->keycloak_subject === '') {
+            return [];
+        }
+
+        try {
+            return $this->keycloakAdminProvisioner->fetchUserProfile($user->keycloak_subject);
+        } catch (Throwable) {
+            return [];
+        }
     }
 }
