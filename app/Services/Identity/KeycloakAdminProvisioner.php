@@ -8,22 +8,28 @@ use RuntimeException;
 
 class KeycloakAdminProvisioner
 {
-    public function provisionUser(string $name, string $email, string $password): string
+    public function provisionUser(string $name, string $email, string $password, ?string $lastName = null): string
     {
+        $payload = [
+            'username' => $email,
+            'email' => $email,
+            'enabled' => true,
+            'emailVerified' => true,
+            'firstName' => $name,
+            'credentials' => [[
+                'type' => 'password',
+                'value' => $password,
+                'temporary' => false,
+            ]],
+        ];
+
+        if ($lastName !== null) {
+            $payload['lastName'] = $lastName;
+        }
+
         $response = $this->httpClient()
             ->withToken($this->adminAccessToken())
-            ->post($this->adminUsersUrl(), [
-                'username' => $email,
-                'email' => $email,
-                'enabled' => true,
-                'emailVerified' => true,
-                'firstName' => $name,
-                'credentials' => [[
-                    'type' => 'password',
-                    'value' => $password,
-                    'temporary' => false,
-                ]],
-            ]);
+            ->post($this->adminUsersUrl(), $payload);
 
         if ($response->status() === 409) {
             return $this->findUserIdByEmail($email);
@@ -41,18 +47,24 @@ class KeycloakAdminProvisioner
         return $this->findUserIdByEmail($email);
     }
 
-    public function updateUser(string $subject, string $name, string $email, ?string $password = null): void
+    public function updateUser(string $subject, string $name, string $email, ?string $password = null, ?string $lastName = null): void
     {
         $accessToken = $this->adminAccessToken();
 
+        $payload = [
+            'email' => $email,
+            'enabled' => true,
+            'emailVerified' => true,
+            'firstName' => $name,
+        ];
+
+        if ($lastName !== null) {
+            $payload['lastName'] = $lastName;
+        }
+
         $this->httpClient()
             ->withToken($accessToken)
-            ->put($this->adminUsersUrl().'/'.$subject, [
-                'email' => $email,
-                'enabled' => true,
-                'emailVerified' => true,
-                'firstName' => $name,
-            ])
+            ->put($this->adminUsersUrl().'/'.$subject, $payload)
             ->throw();
 
         if ($password === null || $password === '') {
