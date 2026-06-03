@@ -18,6 +18,8 @@ return [
     'server_name' => env('SENTRY_SERVER_NAME', env('APP_NAME')),
     'traces_sample_rate' => (float) env('SENTRY_TRACES_SAMPLE_RATE', 0.0),
     'send_default_pii' => filter_var(env('SENTRY_SEND_DEFAULT_PII', false), FILTER_VALIDATE_BOOLEAN),
+    'http_ssl_native_ca' => filter_var(env('SENTRY_HTTP_SSL_NATIVE_CA', true), FILTER_VALIDATE_BOOLEAN),
+    'http_ssl_verify_peer' => filter_var(env('SENTRY_HTTP_SSL_VERIFY_PEER', true), FILTER_VALIDATE_BOOLEAN),
     'before_send' => [SentryEventContext::class, 'beforeSend'],
 
     'ignore_exceptions' => [
@@ -29,3 +31,4 @@ return [
         TokenMismatchException::class,
     ],
 ];
+
