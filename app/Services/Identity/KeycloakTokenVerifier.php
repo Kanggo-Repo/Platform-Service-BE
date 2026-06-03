@@ -4,6 +4,7 @@ namespace App\Services\Identity;
 
 use App\Support\Observability\RequestCorrelation;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -164,3 +165,4 @@ class KeycloakTokenVerifier
         return base64_decode(strtr($value, '-_', '+/'));
     }
 }
+
