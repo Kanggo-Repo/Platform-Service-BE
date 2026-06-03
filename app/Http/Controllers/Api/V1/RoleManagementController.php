@@ -16,8 +16,7 @@ class RoleManagementController extends Controller
     public function __construct(
         private readonly PermissionCatalogService $permissionCatalogService,
         private readonly RolePolicyService $rolePolicyService,
-    ) {
-    }
+    ) {}
 
     public function index(): JsonResponse
     {

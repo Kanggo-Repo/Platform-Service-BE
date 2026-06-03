@@ -12,8 +12,7 @@ class RegistrationSettingsController extends Controller
 {
     public function __construct(
         private readonly RegistrationPolicyService $registrationPolicyService,
-    ) {
-    }
+    ) {}
 
     public function show(): JsonResponse
     {

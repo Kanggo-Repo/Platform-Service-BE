@@ -9,7 +9,6 @@ use App\Services\Identity\UserProjectionService;
 use App\Support\Auth\PlatformIdentity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use RuntimeException;
 use Throwable;
 
 class ProfileController extends Controller

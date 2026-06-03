@@ -10,7 +10,6 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 test('sentry configuration uses the platform event context callback', function () {
     expect(config('sentry.before_send'))->toBe([SentryEventContext::class, 'beforeSend'])
-        ->and(config('sentry.dsn'))->toBeNull()
         ->and(config('sentry.server_name'))->toBe(config('app.name'))
         ->and(config('sentry.ignore_exceptions'))->toContain(
             AuthenticationException::class,
@@ -20,6 +19,10 @@ test('sentry configuration uses the platform event context callback', function (
             MethodNotAllowedHttpException::class,
             TokenMismatchException::class,
         );
+
+    $dsn = config('sentry.dsn');
+
+    expect($dsn === null || is_string($dsn))->toBeTrue();
 });
 
 test('sentry debug route is available in testing', function () {

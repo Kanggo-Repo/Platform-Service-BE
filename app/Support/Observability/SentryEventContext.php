@@ -41,12 +41,12 @@ final class SentryEventContext
 
         $requestId = RequestCorrelation::resolveRequestId($request);
         if ($requestId !== '') {
-            $event->setExtra('request_id', $requestId);
+            self::mergeExtra($event, ['request_id' => $requestId]);
         }
 
         $upstreamService = RequestCorrelation::incomingServiceName($request);
         if ($upstreamService !== null) {
-            $event->setExtra('upstream_service', $upstreamService);
+            self::mergeExtra($event, ['upstream_service' => $upstreamService]);
         }
     }
 
@@ -59,16 +59,21 @@ final class SentryEventContext
                 'username' => $identity->preferredUsername,
             ], static fn (mixed $value): bool => $value !== null && $value !== ''));
 
-            $event->setExtra('auth_subject', $identity->subject);
+            self::mergeExtra($event, ['auth_subject' => $identity->subject]);
 
             if ($identity->preferredUsername !== null && $identity->preferredUsername !== '') {
-                $event->setExtra('preferred_username', $identity->preferredUsername);
+                self::mergeExtra($event, ['preferred_username' => $identity->preferredUsername]);
             }
         }
 
         $user = $request->attributes->get('platform_user');
         if ($user instanceof User) {
-            $event->setExtra('platform_user_id', $user->getKey());
+            self::mergeExtra($event, ['platform_user_id' => $user->getKey()]);
         }
+    }
+
+    private static function mergeExtra(Event $event, array $extra): void
+    {
+        $event->setExtra(array_merge($event->getExtra(), $extra));
     }
 }

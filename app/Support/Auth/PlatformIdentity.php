@@ -11,8 +11,7 @@ final class PlatformIdentity
         public readonly ?string $preferredUsername,
         public readonly array $realmRoles,
         public readonly array $claims,
-    ) {
-    }
+    ) {}
 
     public static function fromClaims(array $claims): self
     {

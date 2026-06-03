@@ -14,8 +14,7 @@ class AuthenticatePlatformToken
 {
     public function __construct(
         private readonly KeycloakTokenVerifier $tokenVerifier,
-    ) {
-    }
+    ) {}
 
     public function handle(Request $request, Closure $next): Response
     {

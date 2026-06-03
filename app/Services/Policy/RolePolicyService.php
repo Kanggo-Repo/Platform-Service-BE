@@ -10,8 +10,7 @@ class RolePolicyService
 {
     public function __construct(
         private readonly PermissionCatalogService $permissionCatalogService,
-    ) {
-    }
+    ) {}
 
     public function syncCatalog(): void
     {
