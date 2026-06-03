@@ -16,6 +16,12 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/health', PlatformHealthController::class);
     Route::get('/health/json', HealthCheckJsonResultsController::class);
 
+    if (app()->environment(['local', 'testing'])) {
+        Route::get('/debug/sentry', function (): never {
+            throw new RuntimeException('Sentry test exception from platform-service-be');
+        });
+    }
+
     Route::middleware(AuthenticatePlatformToken::class)->group(function (): void {
         Route::get('/me', [PlatformIdentityController::class, 'me']);
         Route::get('/navigation', [PlatformIdentityController::class, 'navigation']);
