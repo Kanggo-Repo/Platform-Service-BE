@@ -1,0 +1,150 @@
+name: Platform Service BE CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - staging
+      - master
+      - develop
+      - 'feature/**'
+      - 'fix/**'
+  workflow_dispatch:
+
+concurrency:
+  group: platform-service-be-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: [self-hosted, staging]
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+          extensions: mbstring, intl, pdo_sqlite, sqlite3, zip, bcmath, exif, dom, curl
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: ${{ runner.os }}-platform-service-be-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-platform-service-be-composer-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install Node dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Prepare Laravel app
+        run: cp .env.example .env
+
+      - name: Run quality gate
+        run: composer quality
+
+      - name: Validate compose definitions when present
+        shell: bash
+        run: |
+          found=0
+          for file in compose.yml compose.yaml docker-compose.yml compose.production.yml compose.staging.yml; do
+            if [ -f "$file" ]; then
+              found=1
+              if command -v docker >/dev/null 2>&1; then
+                docker compose -f "$file" config >/dev/null
+              else
+                echo "Docker is not available on this runner; skipping compose validation for $file"
+              fi
+            fi
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "No compose files found at repo root; skipping compose validation."
+          fi
+
+  test_build:
+    name: Test And Build
+    runs-on: [self-hosted, staging]
+    needs: quality
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+          extensions: mbstring, intl, pdo_sqlite, sqlite3, zip, bcmath, exif, dom, curl
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: ${{ runner.os }}-platform-service-be-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-platform-service-be-composer-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install Node dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Prepare Laravel app
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Run test suite
+        env:
+          APP_ENV: testing
+          CACHE_STORE: array
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+          QUEUE_CONNECTION: sync
+          SESSION_DRIVER: array
+        run: php artisan test --without-tty
+
