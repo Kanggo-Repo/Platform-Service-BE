@@ -47,8 +47,10 @@ test('dashboard endpoint aggregates real summary from supply and calculation ser
     $token = $this->issuePlatformToken([], ['super_admin']);
 
     $this->withToken($token)
+        ->withHeader('X-Request-Id', 'platform-phase-5-request')
         ->getJson('/api/v1/dashboard')
         ->assertOk()
+        ->assertHeader('X-Request-Id', 'platform-phase-5-request')
         ->assertJsonPath('data.summary.total_users', 288)
         ->assertJsonPath('data.summary.role_count', 26)
         ->assertJsonPath('data.summary.permission_count', 126)
@@ -59,7 +61,14 @@ test('dashboard endpoint aggregates real summary from supply and calculation ser
 
     Http::assertSent(function ($request) {
         return $request->url() === 'http://127.0.0.1:8008/api/v1/dashboard-summary'
+            && $request->hasHeader('X-Request-Id', 'platform-phase-5-request')
             && $request->hasHeader('X-Service-Name', 'platform-service-be')
             && $request->hasHeader('X-Service-Token', 'platform-be-test-token');
+    });
+
+    Http::assertSent(function ($request) {
+        return $request->url() === 'http://127.0.0.1:8000/api/v1/dashboard-summary'
+            && $request->hasHeader('X-Request-Id', 'platform-phase-5-request')
+            && $request->hasHeader('X-Service-Name', 'platform-service-be');
     });
 });

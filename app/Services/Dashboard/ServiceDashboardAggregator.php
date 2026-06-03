@@ -2,6 +2,7 @@
 
 namespace App\Services\Dashboard;
 
+use App\Support\Observability\RequestCorrelation;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -38,10 +39,12 @@ class ServiceDashboardAggregator
 
         return Http::baseUrl($baseUrl)
             ->acceptJson()
-            ->withHeaders([
-                'X-Service-Name' => $serviceName,
-                'X-Service-Token' => $token,
-            ]);
+            ->withHeaders(array_merge(
+                RequestCorrelation::outgoingHeaders($serviceName),
+                [
+                    'X-Service-Token' => $token,
+                ],
+            ));
     }
 
     private function calculationClient(): PendingRequest
@@ -53,6 +56,7 @@ class ServiceDashboardAggregator
         }
 
         return Http::baseUrl($baseUrl)
-            ->acceptJson();
+            ->acceptJson()
+            ->withHeaders(RequestCorrelation::outgoingHeaders());
     }
 }

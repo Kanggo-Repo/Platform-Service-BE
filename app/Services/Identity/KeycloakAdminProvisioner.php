@@ -2,6 +2,7 @@
 
 namespace App\Services\Identity;
 
+use App\Support\Observability\RequestCorrelation;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -192,7 +193,7 @@ class KeycloakAdminProvisioner
     {
         return Http::withOptions([
             'verify' => $this->resolveVerifyOption(),
-        ])->acceptJson();
+        ])->withHeaders(RequestCorrelation::outgoingHeaders())->acceptJson();
     }
 
     private function resolveVerifyOption(): bool|string

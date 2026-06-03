@@ -39,13 +39,13 @@ final class SentryEventContext
             $event->setTag('route_uri', $route->uri());
         }
 
-        $requestId = trim((string) $request->header('X-Request-Id', ''));
+        $requestId = RequestCorrelation::resolveRequestId($request);
         if ($requestId !== '') {
             $event->setExtra('request_id', $requestId);
         }
 
-        $upstreamService = trim((string) $request->header('X-Service-Name', ''));
-        if ($upstreamService !== '') {
+        $upstreamService = RequestCorrelation::incomingServiceName($request);
+        if ($upstreamService !== null) {
             $event->setExtra('upstream_service', $upstreamService);
         }
     }
