@@ -1,58 +1,382 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Platform Service BE
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+`platform-service-be` adalah backend pusat untuk autentikasi, proyeksi identitas, role dan permission lokal, manajemen user, status registrasi, dan agregasi dashboard lintas service. Repo ini adalah policy hub untuk tiga service split aplikasi: `platform`, `supply`, dan `calculation`.
 
-## About Laravel
+## Tanggung Jawab Utama
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- memvalidasi identitas dari token Keycloak yang diteruskan FE
+- memproyeksikan identitas Keycloak menjadi user lokal aplikasi
+- menyimpan role lokal, permission lokal, dan service access
+- menyediakan API untuk:
+  - identity dan navigation
+  - profile user
+  - manajemen role
+  - manajemen user
+  - toggle self registration
+  - agregasi dashboard lintas service
+- menjadi sumber kebenaran authorization lintas service
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Posisi Dalam Arsitektur
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+```text
+platform-service-fe
+  -> platform-service-be
+    -> supply-service-be
+    -> calculation-service-be
+    -> Keycloak Admin API
 
-## Learning Laravel
+supply-service-fe
+  -> platform-service-be (/api/v1/me, /api/v1/navigation)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+calculation-service-fe
+  -> platform-service-be (/api/v1/me, /api/v1/navigation)
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+## Boundary Service
 
-## Contributing
+Repo ini memiliki boundary berikut:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+- **identity projection**
+  - subject Keycloak, email, display name, dan realm roles diproyeksikan ke user lokal
+- **authorization hub**
+  - role bisnis disimpan lokal
+  - permission snapshot lintas FE dibentuk dari role lokal
+- **bootstrap admin**
+  - realm role Keycloak `super_admin` dipetakan ke local role `super_admin`
+- **service access**
+  - status `allowed`, `pending`, dan `blocked` per service dikelola di sini
+- **dashboard aggregation**
+  - statistik platform dirakit dari owner service lain
 
-## Code of Conduct
+## Auth dan Authorization
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Identity Source
 
-## Security Vulnerabilities
+- login dilakukan di FE via Keycloak
+- FE lalu meneruskan access token ke backend platform
+- backend membaca identity dari token dan membentuk `PlatformIdentity`
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Local Projection
 
-## License
+Identity yang valid akan disinkronkan ke local user melalui `App\Services\Identity\UserProjectionService`.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Hal yang disinkronkan:
+
+- `keycloak_subject`
+- `email`
+- `name`
+- `display_name`
+- `last_login_at`
+- local role `super_admin` bila user memiliki realm role `super_admin`
+- service access berdasarkan role dan permission lokal
+
+### Authorization Model
+
+- Keycloak dipakai untuk **identity** dan bootstrap admin
+- semua role bisnis harian disimpan di database lokal platform
+- FE lain (`supply` dan `calculation`) membaca role dan permission efektif dari API platform
+
+## API Surface
+
+Base path API utama adalah `/api/v1`.
+
+### Public Operational Endpoints
+
+- `GET /api/v1/health`
+- `GET /api/v1/health/json`
+- `GET /api/v1/debug/sentry` hanya di environment `local` dan `testing`
+
+### Identity dan Navigation
+
+- `GET /api/v1/me`
+- `GET /api/v1/navigation`
+
+Response `me` memuat:
+
+- identity subject dan realm roles
+- profile lokal
+- allowed, blocked, dan pending services
+- effective roles
+- effective permissions
+- preferred navigation route
+
+### Profile API
+
+- `GET /api/v1/profile`
+- `PUT /api/v1/profile`
+
+Field profile sudah disejajarkan dengan Keycloak:
+
+- `first_name`
+- `last_name`
+- `full_name`
+- `email`
+- `identity.username`
+- `identity.subject`
+- `identity.realm_roles`
+- `identity.email_verified`
+
+### Dashboard API
+
+- `GET /api/v1/dashboard`
+
+Dashboard menarik data owner service dari:
+
+- `supply-service-be`
+- `calculation-service-be`
+
+### Registration Settings API
+
+- `GET /api/v1/settings/registration`
+- `PUT /api/v1/settings/registration`
+
+Toggle ini juga menyinkronkan `registrationAllowed` di realm Keycloak.
+
+### Roles API
+
+- `GET /api/v1/permissions`
+- `GET /api/v1/roles`
+- `POST /api/v1/roles`
+- `PUT /api/v1/roles/{role}`
+- `DELETE /api/v1/roles/{role}`
+
+### Users API
+
+- `GET /api/v1/users`
+- `POST /api/v1/users`
+- `PUT /api/v1/users/{user}`
+- `DELETE /api/v1/users/{user}`
+
+User management sudah mengikuti model field Keycloak:
+
+- `first_name`
+- `last_name`
+- `email`
+- `password`
+- `roles`
+
+## Integrasi Keluar
+
+Repo ini melakukan HTTP call keluar ke:
+
+- `supply-service-be`
+  - dashboard summary dan store sidebar signals
+- `calculation-service-be`
+  - dashboard summary dan project draft signals
+- Keycloak Admin API
+  - provisioning user
+  - update profile
+  - update password
+  - sync realm registration policy
+
+Konfigurasi utama ada di [config/services.php](./config/services.php).
+
+## Konfigurasi Environment Penting
+
+Salin `.env.example` menjadi `.env`, lalu isi grup variabel berikut.
+
+### App dan Database
+
+- `APP_NAME`
+- `APP_ENV`
+- `APP_DEBUG`
+- `APP_URL`
+- `DB_*`
+- `REDIS_*`
+
+### Internal Service Integration
+
+- `INTERNAL_CALLER_NAME`
+- `INTERNAL_SERVICE_TOKEN`
+- `SUPPLY_SERVICE_BASE_URL`
+- `SUPPLY_SERVICE_VERIFY_SSL`
+- `SUPPLY_SERVICE_CA_BUNDLE`
+- `CALCULATION_SERVICE_BASE_URL`
+- `CALCULATION_SERVICE_VERIFY_SSL`
+- `CALCULATION_SERVICE_CA_BUNDLE`
+
+### Keycloak
+
+- `KEYCLOAK_BASE_URL`
+- `KEYCLOAK_REALM`
+- `KEYCLOAK_CLIENT_ID`
+- admin credential / secret yang dipakai provisioning sesuai `.env.example`
+
+### Observability
+
+- `SENTRY_ENABLED`
+- `SENTRY_LARAVEL_DSN`
+- `SENTRY_RELEASE`
+- `SENTRY_ENVIRONMENT`
+- `SENTRY_SERVER_NAME`
+- `TELESCOPE_ENABLED`
+- `TELESCOPE_PATH`
+
+## Local Development Setup
+
+### Prasyarat
+
+- PHP 8.3+
+- Composer
+- Node.js dan npm
+- MySQL atau MariaDB
+- Redis
+- akses ke Keycloak realm `kanggo`
+- owner service lain jika ingin menguji agregasi dashboard penuh
+
+### Instalasi
+
+```bash
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan db:seed
+```
+
+### Menjalankan Aplikasi
+
+```bash
+composer run dev
+```
+
+Atau manual:
+
+```bash
+php artisan serve
+php artisan queue:listen --tries=1
+npm run dev
+```
+
+## Development Commands
+
+```bash
+php artisan test
+composer analyse
+composer quality
+vendor/bin/pint
+npm run build
+```
+
+Keterangan:
+
+- `composer analyse` menjalankan PHPStan + Larastan
+- `composer quality` menjalankan `pint` dan `analyse`
+
+## Testing Strategy
+
+Repo ini memakai Pest.
+
+Fokus test utama:
+
+- identity API
+- profile API
+- registration settings API
+- role management API
+- user management API
+- dashboard aggregation API
+- health, Sentry, dan Telescope baseline
+
+## Observability dan Operations
+
+Repo ini sudah memiliki baseline hardening berikut:
+
+- **PHPStan + Larastan** untuk static analysis
+- **Spatie Laravel Health**
+  - `GET /api/v1/health`
+  - `GET /api/v1/health/json`
+- **Sentry**
+  - route debug lokal untuk verifikasi ingest
+- **Laravel Telescope**
+  - debugging request, query, exception, cache, dan job
+- **request correlation**
+  - `X-Request-Id` dipropagasikan ke downstream service
+
+## Docker dan Deploy
+
+Repo ini memiliki artefak deploy berikut:
+
+- `compose.yml` untuk local/dev
+- `compose.staging.yml`
+- `compose.production.yml`
+- `Dockerfile`
+- `Dockerfile.production`
+- `docker/entrypoint.sh`
+
+Pola production mengikuti baseline monolith-style yang sudah dipindahkan ke repo service:
+
+- image multi-stage
+- `php-fpm`
+- container `queue`
+- container `scheduler`
+- blue/green app service di compose production
+- network external `frontend` dan `backend`
+
+## CI
+
+Workflow CI tersedia di `.github/workflows/ci.yml`.
+
+Shape-nya:
+
+- `quality`
+  - `vendor/bin/pint --test`
+  - `composer analyse`
+- `test`
+  - Laravel test suite
+- validasi compose bila file compose tersedia
+
+Runner sudah disejajarkan ke base monolith organization.
+
+## Struktur Folder Penting
+
+- `app/Http/Controllers/Api/V1` API utama backend platform
+- `app/Services/Identity` sinkronisasi Keycloak dan user lokal
+- `app/Services/Policy` katalog permission dan assignment permission role
+- `app/Services/Registration` sync kebijakan registrasi
+- `app/Services/Dashboard` agregasi data lintas service
+- `config/health.php` baseline health checks
+- `config/sentry.php` baseline error tracking
+- `config/telescope.php` baseline debugging
+
+## Troubleshooting
+
+### User login tapi role tidak sesuai
+
+Cek:
+
+- realm role `super_admin` di Keycloak bila ini akun bootstrap admin
+- mapping role lokal user di database platform
+- response `GET /api/v1/me`
+
+### Profile tidak sinkron dengan Keycloak
+
+Cek:
+
+- konektivitas platform ke Keycloak Admin API
+- subject user lokal (`keycloak_subject`)
+- field `first_name` dan `last_name` yang dikirim FE
+
+### Dashboard kosong atau tidak lengkap
+
+Cek:
+
+- `SUPPLY_SERVICE_BASE_URL`
+- `CALCULATION_SERVICE_BASE_URL`
+- token internal caller
+- health endpoint owner service
+
+### Toggle registration berubah di UI tapi tidak di Keycloak
+
+Cek:
+
+- kredensial admin Keycloak
+- Sentry/log error dari `RegistrationPolicyService`
+
+## Related Repositories
+
+- `platform-service-fe` untuk shell admin dan dashboard owner
+- `supply-service-be` untuk material, unit, store, dan radius setting
+- `supply-service-fe` untuk workspace supply
+- `calculation-service-be` untuk kalkulasi, taxonomy, draft, dan finalization
+- `calculation-service-fe` untuk workspace kalkulasi
