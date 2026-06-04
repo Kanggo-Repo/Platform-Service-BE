@@ -1,4 +1,4 @@
-FROM php:8.3-cli-bookworm
+FROM php:8.4-cli-bookworm
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -20,6 +20,8 @@ RUN apt-get update \
         pdo_mysql \
         pdo_sqlite \
         zip \
+    && pecl install \
+    && docker-php-ext-enable redis \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
