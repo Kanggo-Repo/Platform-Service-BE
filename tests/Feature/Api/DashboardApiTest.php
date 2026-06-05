@@ -72,3 +72,33 @@ test('dashboard endpoint aggregates real summary from supply and calculation ser
             && $request->hasHeader('X-Service-Name', 'platform-service-be');
     });
 });
+
+test('dashboard endpoint derives total material from chart data when supply total lags behind category counts', function () {
+    Http::fake([
+        'http://127.0.0.1:8008/api/v1/dashboard-summary' => Http::response([
+            'data' => [
+                'material_count' => 282,
+                'unit_count' => 26,
+                'store_count' => 126,
+                'chart_data' => [
+                    'labels' => ['Bata', 'Cat', 'Semen', 'Nat', 'Pasir', 'Keramik'],
+                    'data' => [9, 85, 165, 6, 12, 11],
+                ],
+                'recent_activities' => [],
+            ],
+        ]),
+        'http://127.0.0.1:8000/api/v1/dashboard-summary' => Http::response([
+            'data' => [
+                'work_item_count' => 42,
+            ],
+        ]),
+    ]);
+
+    $token = $this->issuePlatformToken([], ['super_admin']);
+
+    $this->withToken($token)
+        ->getJson('/api/v1/dashboard')
+        ->assertOk()
+        ->assertJsonPath('data.summary.total_users', 288)
+        ->assertJsonPath('data.chart.data.3', 6);
+});

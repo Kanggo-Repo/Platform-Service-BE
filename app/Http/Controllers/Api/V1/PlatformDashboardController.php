@@ -16,11 +16,12 @@ class PlatformDashboardController extends Controller
     {
         $supplySummary = $this->aggregator->fetchSupplySummary();
         $calculationSummary = $this->aggregator->fetchCalculationSummary();
+        $materialCount = $this->resolveSupplyMaterialCount($supplySummary);
 
         return response()->json([
             'data' => [
                 'summary' => [
-                    'total_users' => (int) ($supplySummary['material_count'] ?? 0),
+                    'total_users' => $materialCount,
                     'role_count' => (int) ($supplySummary['unit_count'] ?? 0),
                     'permission_count' => (int) ($supplySummary['store_count'] ?? 0),
                     'pending_access_count' => (int) ($calculationSummary['work_item_count'] ?? 0),
@@ -39,5 +40,15 @@ class PlatformDashboardController extends Controller
                 ],
             ],
         ]);
+    }
+
+    private function resolveSupplyMaterialCount(array $supplySummary): int
+    {
+        $reportedCount = (int) ($supplySummary['material_count'] ?? 0);
+        $chartCount = collect($supplySummary['chart_data']['data'] ?? [])
+            ->map(fn ($value): int => is_numeric($value) ? (int) $value : 0)
+            ->sum();
+
+        return max($reportedCount, $chartCount);
     }
 }
