@@ -165,4 +165,3 @@ class KeycloakTokenVerifier
         return base64_decode(strtr($value, '-_', '+/'));
     }
 }
-
