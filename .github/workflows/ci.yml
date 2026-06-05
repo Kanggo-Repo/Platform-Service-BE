@@ -8,8 +8,8 @@ on:
       - staging
       - master
       - develop
-      - 'feature/**'
-      - 'fix/**'
+      - "feature/**"
+      - "fix/**"
   workflow_dispatch:
 
 concurrency:
@@ -31,7 +31,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: "8.4"
           tools: composer:v2
           coverage: none
           extensions: mbstring, intl, pdo_sqlite, sqlite3, zip, bcmath, exif, dom, curl
@@ -39,7 +39,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
 
       - name: Cache Composer
@@ -100,7 +100,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: "8.3"
           tools: composer:v2
           coverage: none
           extensions: mbstring, intl, pdo_sqlite, sqlite3, zip, bcmath, exif, dom, curl
@@ -108,7 +108,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
 
       - name: Cache Composer
@@ -143,8 +143,7 @@ jobs:
           APP_ENV: testing
           CACHE_STORE: array
           DB_CONNECTION: sqlite
-          DB_DATABASE: ':memory:'
+          DB_DATABASE: ":memory:"
           QUEUE_CONNECTION: sync
           SESSION_DRIVER: array
         run: php artisan test --without-tty
-
