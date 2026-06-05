@@ -16,6 +16,7 @@ RUN set -eux; \
         libzip \
         mysql-client \
         oniguruma \
+        sqlite-libs \
         unzip \
         zip; \
     apk add --no-cache --virtual .build-deps \
@@ -26,7 +27,8 @@ RUN set -eux; \
         libpng-dev \
         libzip-dev \
         linux-headers \
-        oniguruma-dev; \
+        oniguruma-dev \
+        sqlite-dev; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
     docker-php-ext-install -j"$(nproc)" \
         bcmath \

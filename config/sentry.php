@@ -14,8 +14,8 @@ return [
         : null,
 
     'release' => env('SENTRY_RELEASE'),
-    'environment' => env('SENTRY_ENVIRONMENT', env('APP_ENV')),
-    'server_name' => env('SENTRY_SERVER_NAME', env('APP_NAME')),
+    'environment' => env('SENTRY_ENVIRONMENT') ?: env('APP_ENV', 'production'),
+    'server_name' => env('SENTRY_SERVER_NAME') ?: env('APP_NAME', 'platform-service-be'),
     'traces_sample_rate' => (float) env('SENTRY_TRACES_SAMPLE_RATE', 0.0),
     'send_default_pii' => filter_var(env('SENTRY_SEND_DEFAULT_PII', false), FILTER_VALIDATE_BOOLEAN),
     'http_ssl_native_ca' => filter_var(env('SENTRY_HTTP_SSL_NATIVE_CA', true), FILTER_VALIDATE_BOOLEAN),

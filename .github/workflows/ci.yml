@@ -2,6 +2,9 @@ name: Platform Service BE CI
 
 on:
   pull_request:
+    branches:
+      - main
+      - staging
   push:
     branches:
       - main
@@ -17,9 +20,72 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  resolve_target:
+    name: Resolve Runner And Deploy Target
+    runs-on: ubuntu-latest
+    env:
+      STAGING_DEPLOY_DIR: ${{ vars.PLATFORM_BE_STAGING_DEPLOY_DIR }}
+      STAGING_NGINX_CONFIG_FILE: ${{ vars.PLATFORM_BE_STAGING_NGINX_CONFIG_FILE }}
+
+    outputs:
+      target_branch: ${{ steps.resolve.outputs.target_branch }}
+      runner: ${{ steps.resolve.outputs.runner }}
+      deploy_environment: ${{ steps.resolve.outputs.deploy_environment }}
+      compose_file: ${{ steps.resolve.outputs.compose_file }}
+      app_service_prefix: ${{ steps.resolve.outputs.app_service_prefix }}
+      deploy_dir: ${{ steps.resolve.outputs.deploy_dir }}
+      nginx_config_file: ${{ steps.resolve.outputs.nginx_config_file }}
+      deploy_enabled: ${{ steps.resolve.outputs.deploy_enabled }}
+
+    steps:
+      - name: Resolve branch target
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET_BRANCH="${GITHUB_BASE_REF:-${GITHUB_REF_NAME}}"
+
+          echo "target_branch=$TARGET_BRANCH" >> "$GITHUB_OUTPUT"
+
+          case "$TARGET_BRANCH" in
+            main)
+              echo 'runner=["self-hosted","prod"]' >> "$GITHUB_OUTPUT"
+              echo "deploy_environment=production" >> "$GITHUB_OUTPUT"
+              echo "compose_file=compose.production.yml" >> "$GITHUB_OUTPUT"
+              echo "app_service_prefix=app" >> "$GITHUB_OUTPUT"
+              echo "deploy_dir=/home/a/dck/platform-service/backend" >> "$GITHUB_OUTPUT"
+              echo "nginx_config_file=/home/a/dck/nginx-config/platformbe.conf" >> "$GITHUB_OUTPUT"
+              echo "deploy_enabled=true" >> "$GITHUB_OUTPUT"
+              ;;
+            staging)
+              echo 'runner=["self-hosted","staging"]' >> "$GITHUB_OUTPUT"
+              echo "deploy_environment=staging" >> "$GITHUB_OUTPUT"
+              echo "compose_file=compose.staging.yml" >> "$GITHUB_OUTPUT"
+              echo "app_service_prefix=app_staging" >> "$GITHUB_OUTPUT"
+              echo "deploy_dir=${STAGING_DEPLOY_DIR}" >> "$GITHUB_OUTPUT"
+              echo "nginx_config_file=${STAGING_NGINX_CONFIG_FILE}" >> "$GITHUB_OUTPUT"
+              if [ -n "${STAGING_DEPLOY_DIR:-}" ] && [ -n "${STAGING_NGINX_CONFIG_FILE:-}" ]; then
+                echo "deploy_enabled=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "deploy_enabled=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              echo 'runner=["self-hosted","staging"]' >> "$GITHUB_OUTPUT"
+              echo "deploy_environment=staging" >> "$GITHUB_OUTPUT"
+              echo "compose_file=compose.staging.yml" >> "$GITHUB_OUTPUT"
+              echo "app_service_prefix=app_staging" >> "$GITHUB_OUTPUT"
+              echo "deploy_dir=" >> "$GITHUB_OUTPUT"
+              echo "nginx_config_file=" >> "$GITHUB_OUTPUT"
+              echo "deploy_enabled=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
   quality:
     name: Quality
-    runs-on: [self-hosted, staging]
+    needs: resolve_target
+    runs-on: ${{ fromJSON(needs.resolve_target.outputs.runner) }}
 
     permissions:
       contents: read
@@ -87,8 +153,10 @@ jobs:
 
   test_build:
     name: Test And Build
-    runs-on: [self-hosted, staging]
-    needs: quality
+    needs:
+      - resolve_target
+      - quality
+    runs-on: ${{ fromJSON(needs.resolve_target.outputs.runner) }}
 
     permissions:
       contents: read
@@ -147,3 +215,184 @@ jobs:
           QUEUE_CONNECTION: sync
           SESSION_DRIVER: array
         run: php artisan test --without-tty
+
+  deploy:
+    name: Deploy Blue-Green
+    needs:
+      - resolve_target
+      - test_build
+    if: github.event_name == 'push' && needs.resolve_target.outputs.deploy_enabled == 'true'
+    runs-on: ${{ fromJSON(needs.resolve_target.outputs.runner) }}
+    environment: ${{ needs.resolve_target.outputs.deploy_environment }}
+
+    permissions:
+      contents: read
+
+    env:
+      COMPOSE_FILE: ${{ needs.resolve_target.outputs.compose_file }}
+      APP_SERVICE_PREFIX: ${{ needs.resolve_target.outputs.app_service_prefix }}
+      DEPLOY_DIR: ${{ needs.resolve_target.outputs.deploy_dir }}
+      CURRENT_COLOR_FILE: ${{ github.workspace }}/.deploy/${{ needs.resolve_target.outputs.deploy_environment }}_current_color
+      NGINX_CONFIG_FILE: ${{ needs.resolve_target.outputs.nginx_config_file }}
+      NGINX_CONTAINER: ${{ vars.PLATFORM_BE_NGINX_CONTAINER }}
+
+    steps:
+      - name: Validate deploy configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DEPLOY_DIR:-}" ]; then
+            echo "Missing deploy directory." >&2
+            exit 1
+          fi
+
+          if [ ! -d "$DEPLOY_DIR" ]; then
+            echo "Deploy directory not found: $DEPLOY_DIR" >&2
+            exit 1
+          fi
+
+          if [ ! -d "$DEPLOY_DIR/.git" ]; then
+            echo "Deploy directory is not a git checkout: $DEPLOY_DIR" >&2
+            exit 1
+          fi
+
+          mkdir -p "$(dirname "$CURRENT_COLOR_FILE")"
+
+          if [ ! -f "$DEPLOY_DIR/$COMPOSE_FILE" ]; then
+            echo "Compose file not found: $DEPLOY_DIR/$COMPOSE_FILE" >&2
+            exit 1
+          fi
+
+          if [ ! -f "$DEPLOY_DIR/.env" ]; then
+            echo "Expected deploy .env file in $DEPLOY_DIR." >&2
+            exit 1
+          fi
+
+          if [ -z "${NGINX_CONFIG_FILE:-}" ]; then
+            echo "Missing nginx config file path." >&2
+            exit 1
+          fi
+
+          if [ ! -f "$NGINX_CONFIG_FILE" ]; then
+            echo "Nginx config file not found: $NGINX_CONFIG_FILE" >&2
+            exit 1
+          fi
+
+      - name: Deploy locally on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          NGINX_CONTAINER="${NGINX_CONTAINER:-nginx_utama}"
+          TARGET_BRANCH="${{ needs.resolve_target.outputs.target_branch }}"
+
+          if [ "$APP_SERVICE_PREFIX" = "app" ]; then
+            AUX_CONTAINER_PREFIX="platformbe"
+          else
+            AUX_CONTAINER_PREFIX="platformbe_staging"
+          fi
+
+          echo "===> Sync code"
+          git config --global --add safe.directory "$DEPLOY_DIR"
+          cd "$DEPLOY_DIR"
+          git fetch origin
+          git checkout "$TARGET_BRANCH"
+          git restore --source "origin/$TARGET_BRANCH" --staged --worktree . ':(exclude)storage'
+          git clean -fd -- . ':(exclude)storage'
+
+          CURRENT="$(cat "$CURRENT_COLOR_FILE" 2>/dev/null || echo "blue")"
+
+          if [ "$CURRENT" = "blue" ]; then
+            TARGET="green"
+            OLD="blue"
+          else
+            TARGET="blue"
+            OLD="green"
+          fi
+
+          TARGET_SERVICE="${APP_SERVICE_PREFIX}_${TARGET}"
+          OLD_SERVICE="${APP_SERVICE_PREFIX}_${OLD}"
+
+          echo "Current color: $CURRENT"
+          echo "Deploying to service: $TARGET_SERVICE"
+
+          echo "===> Build target"
+          docker compose -f "$COMPOSE_FILE" build "$TARGET_SERVICE"
+
+          echo "===> Start target"
+          docker compose -f "$COMPOSE_FILE" up -d --no-deps "$TARGET_SERVICE"
+
+          echo "===> Wait for PHP-FPM"
+          sleep 10
+
+          echo "===> Validate target container"
+          CONTAINER_ID="$(docker compose -f "$COMPOSE_FILE" ps -q "$TARGET_SERVICE")"
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "Container ID for $TARGET_SERVICE not found." >&2
+            exit 1
+          fi
+
+          ATTEMPTS=0
+          until [ "$ATTEMPTS" -ge 6 ]; do
+            STATUS="$(docker inspect -f '{{.State.Status}}' "$CONTAINER_ID" 2>/dev/null || true)"
+
+            if [ "$STATUS" = "running" ]; then
+              break
+            fi
+
+            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ]; then
+              echo "Container $TARGET_SERVICE failed with status: $STATUS" >&2
+              docker logs "$CONTAINER_ID" || true
+              exit 1
+            fi
+
+            ATTEMPTS=$((ATTEMPTS + 1))
+            sleep 5
+          done
+
+          STATUS="$(docker inspect -f '{{.State.Status}}' "$CONTAINER_ID" 2>/dev/null || true)"
+          if [ "$STATUS" != "running" ]; then
+            echo "Container $TARGET_SERVICE did not reach running state. Final status: ${STATUS:-unknown}" >&2
+            docker logs "$CONTAINER_ID" || true
+            exit 1
+          fi
+
+          echo "===> Prepare writable runtime paths"
+          docker exec -u 0 "$CONTAINER_ID" sh -lc '
+            mkdir -p \
+              /var/www/html/storage/logs \
+              /var/www/html/storage/framework/cache/data \
+              /var/www/html/storage/framework/sessions \
+              /var/www/html/storage/framework/testing \
+              /var/www/html/storage/framework/views \
+              /var/www/html/bootstrap/cache
+            chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+            chmod -R ug+rwx /var/www/html/storage /var/www/html/bootstrap/cache
+          '
+
+          echo "===> Run migrations"
+          docker compose -f "$COMPOSE_FILE" exec -T "$TARGET_SERVICE" php artisan migrate --force
+
+          echo "===> Sync built assets to workspace"
+          rm -rf "$DEPLOY_DIR/public/build"
+          docker cp "$CONTAINER_ID:/var/www/html/public/build" "$DEPLOY_DIR/public/"
+
+          echo "===> Switch nginx upstream"
+          sed -i "s|server ${APP_SERVICE_PREFIX}_blue:9000;|server ${TARGET_SERVICE}:9000;|g" "$NGINX_CONFIG_FILE"
+          sed -i "s|server ${APP_SERVICE_PREFIX}_green:9000;|server ${TARGET_SERVICE}:9000;|g" "$NGINX_CONFIG_FILE"
+
+          echo "===> Reload nginx"
+          docker exec "$NGINX_CONTAINER" nginx -t
+          docker exec "$NGINX_CONTAINER" nginx -s reload
+          echo "$TARGET" > "$CURRENT_COLOR_FILE"
+
+          echo "===> Rebuild queue and scheduler"
+          docker compose -f "$COMPOSE_FILE" build queue scheduler
+          docker rm -f \
+            "${AUX_CONTAINER_PREFIX}_queue" \
+            "${AUX_CONTAINER_PREFIX}_scheduler" || true
+          docker compose -f "$COMPOSE_FILE" up -d --no-deps queue scheduler
+
+          echo "===> Stop old app"
+          docker compose -f "$COMPOSE_FILE" stop "$OLD_SERVICE" || true
