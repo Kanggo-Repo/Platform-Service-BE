@@ -321,7 +321,8 @@ jobs:
           docker compose -f "$COMPOSE_FILE" build "$TARGET_SERVICE"
 
           echo "===> Start target"
-          docker compose -f "$COMPOSE_FILE" up -d --no-deps "$TARGET_SERVICE"
+          docker rm -f "${AUX_CONTAINER_PREFIX}_${TARGET}" || true
+          docker compose -f "$COMPOSE_FILE" up -d --no-deps --remove-orphans "$TARGET_SERVICE"
 
           echo "===> Wait for PHP-FPM"
           sleep 10
