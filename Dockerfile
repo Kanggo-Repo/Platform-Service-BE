@@ -20,7 +20,7 @@ RUN apt-get update \
         pdo_mysql \
         pdo_sqlite \
         zip \
-    && pecl install \
+    && pecl install redis \
     && docker-php-ext-enable redis \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

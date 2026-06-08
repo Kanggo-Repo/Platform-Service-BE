@@ -15,7 +15,7 @@ x-service-env: &service_env
   TELESCOPE_ENABLED: ${TELESCOPE_ENABLED:-false}
 
 services:
-  app_blue:
+  platformbe_blue:
     build:
       context: ${APP_ROOT:-.}
       dockerfile: Dockerfile.production
@@ -43,7 +43,7 @@ services:
       resources:
         limits:
           memory: 512M
-          cpus: '1.0'
+          cpus: "1.0"
         reservations:
           memory: 256M
     logging:
@@ -52,7 +52,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  app_green:
+  platformbe_green:
     build:
       context: ${APP_ROOT:-.}
       dockerfile: Dockerfile.production
@@ -80,7 +80,7 @@ services:
       resources:
         limits:
           memory: 512M
-          cpus: '1.0'
+          cpus: "1.0"
         reservations:
           memory: 256M
     logging:
@@ -112,7 +112,7 @@ services:
       resources:
         limits:
           memory: 256M
-          cpus: '0.5'
+          cpus: "0.5"
     logging:
       driver: json-file
       options:
@@ -141,7 +141,7 @@ services:
       resources:
         limits:
           memory: 128M
-          cpus: '0.25'
+          cpus: "0.25"
     logging:
       driver: json-file
       options:
@@ -155,4 +155,3 @@ networks:
   backend:
     external: true
     name: dck_backend
-
