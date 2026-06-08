@@ -53,7 +53,7 @@ jobs:
               echo 'runner=["self-hosted","prod"]' >> "$GITHUB_OUTPUT"
               echo "deploy_environment=production" >> "$GITHUB_OUTPUT"
               echo "compose_file=compose.production.yml" >> "$GITHUB_OUTPUT"
-              echo "app_service_prefix=app" >> "$GITHUB_OUTPUT"
+              echo "app_service_prefix=platformbe" >> "$GITHUB_OUTPUT"
               echo "deploy_dir=/home/a/dck/platform-service/backend" >> "$GITHUB_OUTPUT"
               echo "nginx_config_file=/home/a/dck/nginx-config/platformbe.conf" >> "$GITHUB_OUTPUT"
               echo "deploy_enabled=true" >> "$GITHUB_OUTPUT"
@@ -379,8 +379,8 @@ jobs:
           docker cp "$CONTAINER_ID:/var/www/html/public/build" "$DEPLOY_DIR/public/"
 
           echo "===> Switch nginx upstream"
-          sed -i "s|server ${APP_SERVICE_PREFIX}_blue:9000;|server ${TARGET_SERVICE}:9000;|g" "$NGINX_CONFIG_FILE"
-          sed -i "s|server ${APP_SERVICE_PREFIX}_green:9000;|server ${TARGET_SERVICE}:9000;|g" "$NGINX_CONFIG_FILE"
+          sed -i "s|server ${APP_SERVICE_PREFIX}_blue:8000;|server ${TARGET_SERVICE}:8000;|g" "$NGINX_CONFIG_FILE"
+          sed -i "s|server ${APP_SERVICE_PREFIX}_green:8000;|server ${TARGET_SERVICE}:8000;|g" "$NGINX_CONFIG_FILE"
 
           echo "===> Reload nginx"
           docker exec "$NGINX_CONTAINER" nginx -t
