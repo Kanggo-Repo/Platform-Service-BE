@@ -287,7 +287,7 @@ jobs:
           NGINX_CONTAINER="${NGINX_CONTAINER:-nginx_utama}"
           TARGET_BRANCH="${{ needs.resolve_target.outputs.target_branch }}"
 
-          if [ "$APP_SERVICE_PREFIX" = "app" ]; then
+          if [ "$APP_SERVICE_PREFIX" = "platformbe" ]; then
             AUX_CONTAINER_PREFIX="platformbe"
           else
             AUX_CONTAINER_PREFIX="platformbe_staging"
