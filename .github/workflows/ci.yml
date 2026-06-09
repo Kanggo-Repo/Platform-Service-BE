@@ -297,9 +297,9 @@ jobs:
           git config --global --add safe.directory "$DEPLOY_DIR"
           cd "$DEPLOY_DIR"
           git fetch origin
-          git checkout -f "$TARGET_BRANCH"
-          git reset --hard "origin/$TARGET_BRANCH"
-          git clean -fd -e .env -e storage/ -e bootstrap/cache/
+          git checkout "$TARGET_BRANCH"
+          git restore --source "origin/$TARGET_BRANCH" --staged --worktree . ':(exclude)storage'
+          git clean -fd -- . ':(exclude)storage'
 
           CURRENT="$(cat "$CURRENT_COLOR_FILE" 2>/dev/null || echo "blue")"
 
