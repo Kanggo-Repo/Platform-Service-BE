@@ -23,6 +23,9 @@ services:
         PHP_VERSION: ${PHP_VERSION:-8.3}
     container_name: platformbe_staging_blue
     restart: always
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    expose:
+      - "8000"
     environment:
       <<: *service_env
     env_file:
@@ -34,7 +37,7 @@ services:
       - frontend
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "php-fpm -t || exit 1"]
+      ttest: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/up || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -60,6 +63,9 @@ services:
         PHP_VERSION: ${PHP_VERSION:-8.3}
     container_name: platformbe_staging_green
     restart: always
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    expose:
+      - "8000"
     environment:
       <<: *service_env
     env_file:
@@ -71,7 +77,7 @@ services:
       - frontend
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "php-fpm -t || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/up || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

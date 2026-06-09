@@ -232,7 +232,7 @@ jobs:
       COMPOSE_FILE: ${{ needs.resolve_target.outputs.compose_file }}
       APP_SERVICE_PREFIX: ${{ needs.resolve_target.outputs.app_service_prefix }}
       DEPLOY_DIR: ${{ needs.resolve_target.outputs.deploy_dir }}
-      CURRENT_COLOR_FILE: ${{ github.workspace }}/.deploy/${{ needs.resolve_target.outputs.deploy_environment }}_current_color
+      CURRENT_COLOR_FILE: ${{ needs.resolve_target.outputs.deploy_dir }}/.deploy/${{ needs.resolve_target.outputs.app_service_prefix }}_${{ needs.resolve_target.outputs.deploy_environment }}_current_color
       NGINX_CONFIG_FILE: ${{ needs.resolve_target.outputs.nginx_config_file }}
       NGINX_CONTAINER: ${{ vars.PLATFORM_BE_NGINX_CONTAINER }}
 
@@ -297,9 +297,9 @@ jobs:
           git config --global --add safe.directory "$DEPLOY_DIR"
           cd "$DEPLOY_DIR"
           git fetch origin
-          git checkout "$TARGET_BRANCH"
-          git restore --source "origin/$TARGET_BRANCH" --staged --worktree . ':(exclude)storage'
-          git clean -fd -- . ':(exclude)storage'
+          git checkout -f "$TARGET_BRANCH"
+          git reset --hard "origin/$TARGET_BRANCH"
+          git clean -fd -e .env -e storage/ -e bootstrap/cache/
 
           CURRENT="$(cat "$CURRENT_COLOR_FILE" 2>/dev/null || echo "blue")"
 
@@ -335,15 +335,16 @@ jobs:
           fi
 
           ATTEMPTS=0
-          until [ "$ATTEMPTS" -ge 6 ]; do
+          until [ "$ATTEMPTS" -ge 12 ]; do
             STATUS="$(docker inspect -f '{{.State.Status}}' "$CONTAINER_ID" 2>/dev/null || true)"
+            HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CONTAINER_ID" 2>/dev/null || true)"
 
-            if [ "$STATUS" = "running" ]; then
+            if [ "$STATUS" = "running" ] && [ "$HEALTH" = "healthy" ]; then
               break
             fi
 
-            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ]; then
-              echo "Container $TARGET_SERVICE failed with status: $STATUS" >&2
+            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ] || [ "$HEALTH" = "unhealthy" ]; then
+            echo "Container $TARGET_SERVICE failed. status=${STATUS:-unknown} health=${HEALTH:-unknown}" >&2
               docker logs "$CONTAINER_ID" || true
               exit 1
             fi
@@ -353,8 +354,9 @@ jobs:
           done
 
           STATUS="$(docker inspect -f '{{.State.Status}}' "$CONTAINER_ID" 2>/dev/null || true)"
-          if [ "$STATUS" != "running" ]; then
-            echo "Container $TARGET_SERVICE did not reach running state. Final status: ${STATUS:-unknown}" >&2
+          HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CONTAINER_ID" 2>/dev/null || true)"
+            if [ "$STATUS" != "running" ] || [ "$HEALTH" != "healthy" ]; then
+            echo "Container $TARGET_SERVICE did not reach healthy state. status=${STATUS:-unknown} health=${HEALTH:-unknown}" >&2
             docker logs "$CONTAINER_ID" || true
             exit 1
           fi
@@ -380,12 +382,24 @@ jobs:
           docker cp "$CONTAINER_ID:/var/www/html/public/build" "$DEPLOY_DIR/public/"
 
           echo "===> Switch nginx upstream"
-          sed -i "s|server ${APP_SERVICE_PREFIX}_blue:8000;|server ${TARGET_SERVICE}:8000;|g" "$NGINX_CONFIG_FILE"
-          sed -i "s|server ${APP_SERVICE_PREFIX}_green:8000;|server ${TARGET_SERVICE}:8000;|g" "$NGINX_CONFIG_FILE"
+          NGINX_BACKUP="$(mktemp)"
+          cp "$NGINX_CONFIG_FILE" "$NGINX_BACKUP"
+          sed -Ei "s|set \$upstream http://[^;]+:8000;|set \$upstream http://${TARGET_SERVICE}:8000;|g" "$NGINX_CONFIG_FILE"
 
           echo "===> Reload nginx"
-          docker exec "$NGINX_CONTAINER" nginx -t
-          docker exec "$NGINX_CONTAINER" nginx -s reload
+          if ! docker exec "$NGINX_CONTAINER" nginx -t; then
+            cp "$NGINX_BACKUP" "$NGINX_CONFIG_FILE"
+            rm -f "$NGINX_BACKUP"
+            exit 1
+          fi
+          if ! docker exec "$NGINX_CONTAINER" nginx -s reload; then
+            cp "$NGINX_BACKUP" "$NGINX_CONFIG_FILE"
+            docker exec "$NGINX_CONTAINER" nginx -t || true
+            docker exec "$NGINX_CONTAINER" nginx -s reload || true
+            rm -f "$NGINX_BACKUP"
+            exit 1
+          fi
+          rm -f "$NGINX_BACKUP"
           echo "$TARGET" > "$CURRENT_COLOR_FILE"
 
           echo "===> Rebuild queue and scheduler"
