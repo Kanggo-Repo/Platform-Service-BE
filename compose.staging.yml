@@ -37,7 +37,7 @@ services:
       - frontend
       - backend
     healthcheck:
-      ttest: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/up || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/up || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
