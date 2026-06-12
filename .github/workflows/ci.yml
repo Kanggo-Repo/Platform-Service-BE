@@ -280,6 +280,8 @@ jobs:
           fi
 
       - name: Deploy locally on runner
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -294,11 +296,12 @@ jobs:
           fi
 
           echo "===> Sync code"
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
           git config --global --add safe.directory "$DEPLOY_DIR"
           cd "$DEPLOY_DIR"
-          git fetch origin
-          git checkout "$TARGET_BRANCH"
-          git restore --source "origin/$TARGET_BRANCH" --staged --worktree . ':(exclude)storage'
+          git fetch origin --prune
+          git checkout "$TARGET_BRANCH" 2>/dev/null || git checkout -b "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+          git reset --hard "origin/$TARGET_BRANCH"
           git clean -fd -- . ':(exclude)storage' ':(exclude).deploy'
           mkdir -p "$(dirname "$CURRENT_COLOR_FILE")"
 
@@ -345,7 +348,7 @@ jobs:
             fi
 
             if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ] || [ "$HEALTH" = "unhealthy" ]; then
-            echo "Container $TARGET_SERVICE failed. status=${STATUS:-unknown} health=${HEALTH:-unknown}" >&2
+              echo "Container $TARGET_SERVICE failed. status=${STATUS:-unknown} health=${HEALTH:-unknown}" >&2
               docker logs "$CONTAINER_ID" || true
               exit 1
             fi
@@ -356,7 +359,7 @@ jobs:
 
           STATUS="$(docker inspect -f '{{.State.Status}}' "$CONTAINER_ID" 2>/dev/null || true)"
           HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CONTAINER_ID" 2>/dev/null || true)"
-            if [ "$STATUS" != "running" ] || [ "$HEALTH" != "healthy" ]; then
+          if [ "$STATUS" != "running" ] || [ "$HEALTH" != "healthy" ]; then
             echo "Container $TARGET_SERVICE did not reach healthy state. status=${STATUS:-unknown} health=${HEALTH:-unknown}" >&2
             docker logs "$CONTAINER_ID" || true
             exit 1
@@ -413,3 +416,6 @@ jobs:
 
           echo "===> Stop old app"
           docker compose -f "$COMPOSE_FILE" stop "$OLD_SERVICE" || true
+
+          echo "===> Prune dangling images"
+          docker image prune -f || true
