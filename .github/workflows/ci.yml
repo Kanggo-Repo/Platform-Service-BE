@@ -386,21 +386,47 @@ jobs:
           rm -rf "$DEPLOY_DIR/public/build"
           docker cp "$CONTAINER_ID:/var/www/html/public/build" "$DEPLOY_DIR/public/"
 
+          echo "===> Verify ${NGINX_CONTAINER} can reach ${TARGET_SERVICE}:8000 before switching"
+          REACHED=0
+          for attempt in 1 2 3 4 5 6; do
+            if docker exec "$NGINX_CONTAINER" wget -q -T 3 -O /dev/null "http://${TARGET_SERVICE}:8000/up"; then
+              REACHED=1
+              break
+            fi
+            echo "attempt $attempt: $NGINX_CONTAINER cannot reach $TARGET_SERVICE yet; retrying in 5s..."
+            sleep 5
+          done
+          if [ "$REACHED" -ne 1 ]; then
+            echo "Aborting before nginx switch: $NGINX_CONTAINER cannot reach ${TARGET_SERVICE}:8000. Leaving the current upstream untouched (no downtime)." >&2
+            exit 1
+          fi
+
           echo "===> Switch nginx upstream"
           NGINX_BACKUP="$(mktemp)"
           cp "$NGINX_CONFIG_FILE" "$NGINX_BACKUP"
           sed -Ei "s|set \$upstream http://[^;]+:8000;|set \$upstream http://${TARGET_SERVICE}:8000;|g" "$NGINX_CONFIG_FILE"
 
-          echo "===> Reload nginx"
+          echo "===> Validate and reload nginx (retry + auto-restore on failure)"
           if ! docker exec "$NGINX_CONTAINER" nginx -t; then
+            echo "nginx config test failed after upstream switch; restoring backup." >&2
             cp "$NGINX_BACKUP" "$NGINX_CONFIG_FILE"
+            docker exec "$NGINX_CONTAINER" nginx -s reload || true
             rm -f "$NGINX_BACKUP"
             exit 1
           fi
-          if ! docker exec "$NGINX_CONTAINER" nginx -s reload; then
+          RELOADED=0
+          for attempt in 1 2 3; do
+            if docker exec "$NGINX_CONTAINER" nginx -s reload; then
+              RELOADED=1
+              break
+            fi
+            echo "nginx reload attempt $attempt failed; retrying in 3s..."
+            sleep 3
+          done
+          if [ "$RELOADED" -ne 1 ]; then
+            echo "nginx reload failed after retries; restoring backup upstream." >&2
             cp "$NGINX_BACKUP" "$NGINX_CONFIG_FILE"
-            docker exec "$NGINX_CONTAINER" nginx -t || true
-            docker exec "$NGINX_CONTAINER" nginx -s reload || true
+            docker exec "$NGINX_CONTAINER" nginx -t && docker exec "$NGINX_CONTAINER" nginx -s reload || true
             rm -f "$NGINX_BACKUP"
             exit 1
           fi
