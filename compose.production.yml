@@ -1,3 +1,5 @@
+name: platformbe-production
+
 x-service-env: &service_env
   APP_ENV: ${APP_ENV:-production}
   APP_DEBUG: ${APP_DEBUG:-false}
