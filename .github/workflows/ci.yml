@@ -296,10 +296,9 @@ jobs:
           fi
 
           echo "===> Sync code"
-          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
           git config --global --add safe.directory "$DEPLOY_DIR"
           cd "$DEPLOY_DIR"
-          git remote set-url origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git fetch origin --prune
           git checkout "$TARGET_BRANCH" 2>/dev/null || git checkout -b "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
           git reset --soft "origin/$TARGET_BRANCH"
